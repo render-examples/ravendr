@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { streamSSE } from "hono/streaming";
 import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { createServer } from "http";
@@ -6,10 +7,18 @@ import { WebSocketServer, WebSocket } from "ws";
 import { initDb, getRecentWorkflowRuns, getAllKnowledge } from "./lib/db.js";
 import { createVoiceProxy } from "./voice/proxy.js";
 import { Render } from "@renderinc/sdk";
+import {
+  runIngestPipeline,
+  runRecallPipeline,
+  runReportPipeline,
+} from "./pipeline/orchestrator.js";
 
 const app = new Hono();
 const PORT = parseInt(process.env.PORT ?? "3000", 10);
-const WORKFLOW_SLUG = process.env.WORKFLOW_SLUG ?? "ravendr-workflows";
+
+function isTaskSuccess(status: string): boolean {
+  return status === "completed" || status === "succeeded";
+}
 
 app.get("/health", (c) => c.json({ status: "ok", service: "ravendr-web" }));
 
@@ -36,13 +45,107 @@ app.get("/api/report/:taskRunId", async (c) => {
   try {
     const render = new Render();
     const details = await render.workflows.getTaskRun(taskRunId);
-    if (details.status === "completed" && details.results.length > 0) {
+    if (isTaskSuccess(details.status) && details.results.length > 0) {
       return c.json(details.results[0]);
     }
     return c.json({ status: details.status });
   } catch {
     return c.json({ error: "Task run not found" }, 404);
   }
+});
+
+app.post("/api/pipeline/ingest", async (c) => {
+  c.header("X-Accel-Buffering", "no");
+  let body: { topic?: string; claim?: string };
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "Invalid JSON" }, 400);
+  }
+  if (!body.topic?.trim() || !body.claim?.trim()) {
+    return c.json({ error: "topic and claim are required" }, 400);
+  }
+  const signal = c.req.raw.signal;
+  return streamSSE(c, async (stream) => {
+    try {
+      for await (const chunk of runIngestPipeline(
+        body.topic!.trim(),
+        body.claim!.trim(),
+        signal
+      )) {
+        await stream.writeSSE({
+          event: chunk.event,
+          data: JSON.stringify(chunk.data),
+        });
+      }
+    } catch (e) {
+      if (e instanceof DOMException && e.name === "AbortError") {
+        await stream.writeSSE({
+          event: "error",
+          data: JSON.stringify({ message: "Request aborted" }),
+        });
+        return;
+      }
+      throw e;
+    }
+  });
+});
+
+app.post("/api/pipeline/recall", async (c) => {
+  c.header("X-Accel-Buffering", "no");
+  let body: { query?: string };
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "Invalid JSON" }, 400);
+  }
+  if (!body.query?.trim()) {
+    return c.json({ error: "query is required" }, 400);
+  }
+  const signal = c.req.raw.signal;
+  return streamSSE(c, async (stream) => {
+    try {
+      for await (const chunk of runRecallPipeline(body.query!.trim(), signal)) {
+        await stream.writeSSE({
+          event: chunk.event,
+          data: JSON.stringify(chunk.data),
+        });
+      }
+    } catch (e) {
+      if (e instanceof DOMException && e.name === "AbortError") {
+        await stream.writeSSE({
+          event: "error",
+          data: JSON.stringify({ message: "Request aborted" }),
+        });
+        return;
+      }
+      throw e;
+    }
+  });
+});
+
+app.post("/api/pipeline/report", async (c) => {
+  c.header("X-Accel-Buffering", "no");
+  const signal = c.req.raw.signal;
+  return streamSSE(c, async (stream) => {
+    try {
+      for await (const chunk of runReportPipeline(signal)) {
+        await stream.writeSSE({
+          event: chunk.event,
+          data: JSON.stringify(chunk.data),
+        });
+      }
+    } catch (e) {
+      if (e instanceof DOMException && e.name === "AbortError") {
+        await stream.writeSSE({
+          event: "error",
+          data: JSON.stringify({ message: "Request aborted" }),
+        });
+        return;
+      }
+      throw e;
+    }
+  });
 });
 
 app.use(

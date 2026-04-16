@@ -317,12 +317,135 @@
       50% { opacity: 0.5; }
     }
 
+    .pipeline-card {
+      margin: 1.25rem auto 0;
+      max-width: 560px;
+      padding: 1rem 1.25rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      text-align: left;
+    }
+    .pipeline-title {
+      font-size: 0.8rem;
+      font-weight: 600;
+      font-family: 'Inter', sans-serif;
+      color: var(--text);
+      margin-bottom: 0.35rem;
+    }
+    .pipeline-hint {
+      font-size: 0.7rem;
+      color: var(--text-dim);
+      line-height: 1.5;
+      margin-bottom: 0.75rem;
+    }
+    .pipeline-hint code { font-size: 0.65rem; background: rgba(255,255,255,0.06); padding: 0.1rem 0.25rem; border-radius: 3px; }
+    .pipeline-meta {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+      margin-bottom: 0.75rem;
+      padding-bottom: 0.75rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .pipeline-meta-right {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+    #btn-pipe-cancel {
+      display: none;
+    }
+    #btn-pipe-cancel.visible {
+      display: inline-flex;
+    }
+    .pipeline-timer {
+      font-size: 0.75rem;
+      font-variant-numeric: tabular-nums;
+      color: var(--text-muted);
+    }
+    .dashboard-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      font-size: 0.7rem;
+      font-weight: 500;
+      color: var(--render-purple);
+      padding: 0.3rem 0.5rem;
+      border: 1px solid rgba(108,99,255,0.25);
+      background: rgba(108,99,255,0.06);
+      text-decoration: none;
+    }
+    .dashboard-link:hover { background: rgba(108,99,255,0.12); text-decoration: none; }
+    .pipeline-row {
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+      margin-bottom: 0.75rem;
+    }
+    .pipeline-row label {
+      font-size: 0.65rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--text-dim);
+      font-weight: 600;
+    }
+    .pipeline-row input {
+      padding: 0.45rem 0.6rem;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-size: 0.8rem;
+      font-family: 'Inter', sans-serif;
+      border-radius: 4px;
+    }
+    .pipeline-row input:focus { outline: none; border-color: var(--render-purple); }
+    .pipeline-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+    .ctrl-btn.primary {
+      background: var(--render-purple);
+      border-color: var(--render-purple);
+      color: #fff;
+    }
+    .ctrl-btn.primary:hover { background: var(--render-purple-hover); color: #fff; }
+    .pipeline-feed {
+      min-height: 2rem;
+      max-height: 220px;
+      overflow-y: auto;
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      line-height: 1.45;
+    }
+    .pipeline-feed .activity-row {
+      padding: 0.35rem 0;
+      border-left: 2px solid var(--border);
+      padding-left: 0.6rem;
+      margin-left: 2px;
+    }
+    .pipeline-feed .activity-row strong { color: var(--text); font-weight: 600; }
+    .pipeline-feed .activity-row.done { border-left-color: var(--green); }
+    .pipeline-feed .activity-row.err { border-left-color: var(--red); color: var(--red); }
+    .pipeline-error {
+      display: none;
+      margin-top: 0.5rem;
+      padding: 0.5rem 0.6rem;
+      background: rgba(239,68,68,0.08);
+      border: 1px solid rgba(239,68,68,0.25);
+      color: #fca5a5;
+      font-size: 0.75rem;
+      border-radius: 4px;
+    }
+    .pipeline-error.visible { display: block; }
+
     @media (max-width: 600px) {
       header { flex-wrap: wrap; gap: 0.5rem; }
       header .actions { gap: 0.375rem; }
       .header-btn { font-size: 0.65rem; padding: 0.25rem 0.5rem; }
       .header-btn .btn-label { display: none; }
       .msg { max-width: 90%; }
+      .pipeline-card { margin-left: 1rem; margin-right: 1rem; }
     }
   </style>
 </head>
@@ -368,6 +491,46 @@
           </svg>
         </button>
         <span class="mic-label" id="mic-label">Click to start</span>
+      </div>
+
+      <div class="pipeline-card" id="pipeline-card">
+        <h3 class="pipeline-title">HTTP pipeline (SSE)</h3>
+        <p class="pipeline-hint">
+          Dispatch workflow tasks from the browser with streamed status. Same tasks as voice: ingest, recall, and report. Needs <code>RENDER_API_KEY</code> on this web service.
+        </p>
+        <div class="pipeline-meta">
+          <span class="pipeline-timer" id="pipeline-timer">0s elapsed</span>
+          <div class="pipeline-meta-right">
+            <button type="button" class="ctrl-btn danger" id="btn-pipe-cancel" title="Stop streaming">Cancel</button>
+            <a class="dashboard-link" href="https://dashboard.render.com" target="_blank" rel="noopener" id="pipeline-dashboard">
+              <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+              Watch tasks in the Render Dashboard
+            </a>
+          </div>
+        </div>
+        <div class="pipeline-row">
+          <label>Learn (ingest)</label>
+          <input type="text" id="pipe-topic" placeholder="Topic (e.g. quantum computing)" autocomplete="off" />
+          <input type="text" id="pipe-claim" placeholder="Claim to verify" autocomplete="off" />
+          <div class="pipeline-actions">
+            <button type="button" class="ctrl-btn primary" id="btn-pipe-ingest">Run ingest</button>
+          </div>
+        </div>
+        <div class="pipeline-row">
+          <label>Recall</label>
+          <input type="text" id="pipe-query" placeholder="What do I know about..." autocomplete="off" />
+          <div class="pipeline-actions">
+            <button type="button" class="ctrl-btn primary" id="btn-pipe-recall">Run recall</button>
+          </div>
+        </div>
+        <div class="pipeline-row">
+          <label>Report</label>
+          <div class="pipeline-actions">
+            <button type="button" class="ctrl-btn primary" id="btn-pipe-report">Generate full report</button>
+          </div>
+        </div>
+        <div class="pipeline-error" id="pipeline-error"></div>
+        <div class="pipeline-feed" id="pipeline-feed"></div>
       </div>
     </div>
 
@@ -431,7 +594,15 @@
     const reportCard = document.getElementById("report-card");
     const btnKnowledge = document.getElementById("btn-knowledge");
     const btnDisconnect = document.getElementById("btn-disconnect");
+    const pipelineFeed = document.getElementById("pipeline-feed");
+    const pipelineError = document.getElementById("pipeline-error");
+    const pipelineTimer = document.getElementById("pipeline-timer");
+    const btnPipeIngest = document.getElementById("btn-pipe-ingest");
+    const btnPipeRecall = document.getElementById("btn-pipe-recall");
+    const btnPipeReport = document.getElementById("btn-pipe-report");
+    const btnPipeCancel = document.getElementById("btn-pipe-cancel");
 
+    let pipelineController = null;
     let ws = null;
     let audioContext = null;
     let mediaStream = null;
@@ -634,6 +805,169 @@
 
     btnKnowledge.addEventListener("click", () => {
       knowledgePanel.classList.toggle("visible");
+    });
+
+    function setPipelineBusy(busy) {
+      btnPipeIngest.disabled = busy;
+      btnPipeRecall.disabled = busy;
+      btnPipeReport.disabled = busy;
+      btnPipeCancel.classList.toggle("visible", busy);
+    }
+
+    function resetPipelineUi() {
+      pipelineFeed.innerHTML = "";
+      pipelineError.textContent = "";
+      pipelineError.classList.remove("visible");
+      pipelineTimer.textContent = "0s elapsed";
+    }
+
+    function appendPipelineRow(parts, variant = "") {
+      const row = document.createElement("div");
+      row.className = "activity-row " + variant;
+      for (const p of parts) {
+        if (typeof p === "string") {
+          row.appendChild(document.createTextNode(p));
+        } else {
+          row.appendChild(p);
+        }
+      }
+      pipelineFeed.appendChild(row);
+      pipelineFeed.scrollTop = pipelineFeed.scrollHeight;
+    }
+
+    async function runSsePipeline(url, init) {
+      if (pipelineController) {
+        pipelineController.abort();
+      }
+      pipelineController = new AbortController();
+      const signal = pipelineController.signal;
+      setPipelineBusy(true);
+      resetPipelineUi();
+      const t0 = Date.now();
+      const tick = setInterval(() => {
+        pipelineTimer.textContent = `${Math.floor((Date.now() - t0) / 1000)}s elapsed`;
+      }, 500);
+      try {
+        const res = await fetch(url, { ...init, signal });
+        if (!res.ok) {
+          const t = await res.text();
+          pipelineError.textContent = t || res.statusText || "Request failed";
+          pipelineError.classList.add("visible");
+          return;
+        }
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          let sep;
+          while ((sep = buffer.indexOf("\n\n")) >= 0) {
+            const block = buffer.slice(0, sep);
+            buffer = buffer.slice(sep + 2);
+            let eventName = "message";
+            const dataParts = [];
+            for (const line of block.split("\n")) {
+              if (line.startsWith("event:")) eventName = line.slice(6).trim();
+              else if (line.startsWith("data:")) dataParts.push(line.slice(5).trimStart());
+            }
+            const raw = dataParts.join("\n");
+            if (!raw) continue;
+            let data;
+            try {
+              data = JSON.parse(raw);
+            } catch {
+              data = { message: raw };
+            }
+            if (eventName === "status") {
+              const w = data.workflowStatus ? ` ${data.workflowStatus}` : "";
+              const strong = document.createElement("strong");
+              strong.textContent = data.phase || "status";
+              appendPipelineRow([strong, document.createTextNode(`${w} (${data.elapsed ?? 0}s)`)]);
+            } else if (eventName === "started") {
+              appendPipelineRow([
+                document.createTextNode("Task run "),
+                (() => {
+                  const code = document.createElement("code");
+                  code.textContent = (data.taskRunId || "").slice(0, 36);
+                  return code;
+                })(),
+              ]);
+            } else if (eventName === "done") {
+              const pre = document.createElement("pre");
+              pre.style.margin = "0.35rem 0 0";
+              pre.style.fontSize = "0.65rem";
+              pre.style.whiteSpace = "pre-wrap";
+              pre.style.wordBreak = "break-all";
+              const text = JSON.stringify(data.result ?? {}, null, 2);
+              pre.textContent = text.length > 4000 ? text.slice(0, 4000) + "\n..." : text;
+              appendPipelineRow([document.createTextNode("Done "), pre], "done");
+            } else if (eventName === "error") {
+              const msg =
+                typeof data === "string"
+                  ? data
+                  : data.message || JSON.stringify(data);
+              pipelineError.textContent = msg;
+              pipelineError.classList.add("visible");
+              appendPipelineRow([document.createTextNode("Error: " + msg)], "err");
+            }
+          }
+        }
+      } catch (e) {
+        if (e && e.name === "AbortError") {
+          appendPipelineRow([document.createTextNode("Cancelled (request aborted).")], "");
+          return;
+        }
+        pipelineError.textContent = e && e.message ? e.message : String(e);
+        pipelineError.classList.add("visible");
+      } finally {
+        clearInterval(tick);
+        pipelineTimer.textContent = `${Math.floor((Date.now() - t0) / 1000)}s elapsed`;
+        setPipelineBusy(false);
+        pipelineController = null;
+      }
+    }
+
+    btnPipeCancel.addEventListener("click", () => {
+      if (pipelineController) pipelineController.abort();
+    });
+
+    btnPipeIngest.addEventListener("click", () => {
+      const topic = document.getElementById("pipe-topic").value.trim();
+      const claim = document.getElementById("pipe-claim").value.trim();
+      if (!topic || !claim) {
+        pipelineError.textContent = "Enter both topic and claim.";
+        pipelineError.classList.add("visible");
+        return;
+      }
+      runSsePipeline("/api/pipeline/ingest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ topic, claim }),
+      });
+    });
+
+    btnPipeRecall.addEventListener("click", () => {
+      const query = document.getElementById("pipe-query").value.trim();
+      if (!query) {
+        pipelineError.textContent = "Enter a recall query.";
+        pipelineError.classList.add("visible");
+        return;
+      }
+      runSsePipeline("/api/pipeline/recall", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query }),
+      });
+    });
+
+    btnPipeReport.addEventListener("click", () => {
+      runSsePipeline("/api/pipeline/report", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{}",
+      });
     });
 
     // Poll for workflow status updates

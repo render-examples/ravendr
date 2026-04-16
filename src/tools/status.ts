@@ -32,7 +32,10 @@ export const checkStatusTool = createTool({
       try {
         const details = await render.workflows.getTaskRun(taskRunId);
 
-        if (details.status === "completed" && details.results.length > 0) {
+        const terminalOk =
+          (details.status === "completed" || details.status === "succeeded") &&
+          details.results.length > 0;
+        if (terminalOk) {
           await completeWorkflowRun(taskRunId, details.results[0] as Record<string, unknown>);
         } else if (details.status === "failed") {
           await failWorkflowRun(taskRunId, details.error ?? "Unknown error");
@@ -61,7 +64,7 @@ export const checkStatusTool = createTool({
     const summary = recent
       .map(
         (r) =>
-          `${r.type} (${r.id.slice(0, 8)}...): ${r.status} — ${new Date(r.created_at).toLocaleTimeString()}`
+          `${r.type} (${r.id.slice(0, 8)}...): ${r.status} - ${new Date(r.created_at).toLocaleTimeString()}`
       )
       .join("\n");
 
@@ -80,7 +83,7 @@ function formatTaskDetails(details: {
   results: unknown[];
   error?: string;
 }): string {
-  if (details.status === "completed") {
+  if (details.status === "completed" || details.status === "succeeded") {
     const result = details.results[0];
     if (result && typeof result === "object" && "briefing" in result) {
       return (result as { briefing: string }).briefing;

@@ -1,7 +1,11 @@
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import { Render } from "@renderinc/sdk";
-import { trackWorkflowRun } from "../lib/db.js";
+import {
+  trackWorkflowRun,
+  completeWorkflowRun,
+  failWorkflowRun,
+} from "../lib/db.js";
 
 const WORKFLOW_SLUG = process.env.WORKFLOW_SLUG ?? "ravendr-workflows";
 
@@ -28,6 +32,25 @@ export const generateReportTool = createTool({
       type: "report",
       input: {},
     });
+
+    void started
+      .get()
+      .then(async (details) => {
+        const status = details.status;
+        if (status === "completed" || status === "succeeded") {
+          const result = (details.results[0] ?? {}) as Record<string, unknown>;
+          await completeWorkflowRun(started.taskRunId, result);
+        } else {
+          await failWorkflowRun(
+            started.taskRunId,
+            details.error ?? `Task ended with status ${status}`
+          );
+        }
+      })
+      .catch(async (err) => {
+        const message = err instanceof Error ? err.message : String(err);
+        await failWorkflowRun(started.taskRunId, message);
+      });
 
     return {
       taskRunId: started.taskRunId,
