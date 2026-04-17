@@ -132,6 +132,8 @@ render.yaml              Render Blueprint
 
 ## Troubleshooting
 
+**Deploy fails or health check never goes green**: the web process listens on `0.0.0.0` and `PORT` (set by Render). Confirm **Build** logs show `npm run build` succeeding and **Shell** start command is `node dist/server.js` from the repo root. If the **workflow** service failed, open its logs: it needs `DATABASE_URL` (Internal URL), `YOU_API_KEY`, `ANTHROPIC_API_KEY`, and a start command that runs the compiled entry (for example `node dist/workflows/index.js` after the same build as the web service).
+
 **Voice connection fails**: check `ASSEMBLYAI_API_KEY` is set on the web service.
 
 **Workflows never complete**: verify the workflow service name matches `WORKFLOW_SLUG` (default: `ravendr-workflows`).

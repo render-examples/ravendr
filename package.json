@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
@@ -13,7 +16,7 @@
     "@renderinc/sdk": "^0.5.0",
     "@mastra/core": "^1.24.1",
     "@mastra/memory": "^1.15.0",
-    "@youdotcom-oss/sdk": "latest",
+    "@youdotcom-oss/sdk": "0.13.1",
     "@anthropic-ai/sdk": "^0.39.0",
     "hono": "^4.0.0",
     "@hono/node-server": "^1.0.0",

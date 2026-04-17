@@ -187,8 +187,8 @@ async function start() {
     });
   });
 
-  server.listen(PORT, () => {
-    console.log(`Ravendr server running on http://localhost:${PORT}`);
+  server.listen(PORT, "0.0.0.0", () => {
+    console.log(`Ravendr server listening on 0.0.0.0:${PORT}`);
   });
 }
 
