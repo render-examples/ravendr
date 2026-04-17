@@ -12,6 +12,7 @@ import {
   runRecallPipeline,
   runReportPipeline,
 } from "./pipeline/orchestrator.js";
+import { getRenderDashboardTasksUrl } from "./lib/render-dashboard-url.js";
 
 const app = new Hono();
 const PORT = parseInt(process.env.PORT ?? "3000", 10);
@@ -21,6 +22,12 @@ function isTaskSuccess(status: string): boolean {
 }
 
 app.get("/health", (c) => c.json({ status: "ok", service: "ravendr-web" }));
+
+app.get("/api/config", (c) =>
+  c.json({
+    dashboardTasksUrl: getRenderDashboardTasksUrl(),
+  })
+);
 
 app.get("/api/workflows/recent", async (c) => {
   try {

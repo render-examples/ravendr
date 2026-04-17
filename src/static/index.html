@@ -601,6 +601,16 @@
     const btnPipeRecall = document.getElementById("btn-pipe-recall");
     const btnPipeReport = document.getElementById("btn-pipe-report");
     const btnPipeCancel = document.getElementById("btn-pipe-cancel");
+    const pipelineDashboard = document.getElementById("pipeline-dashboard");
+
+    fetch("/api/config")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((cfg) => {
+        if (cfg && cfg.dashboardTasksUrl && pipelineDashboard) {
+          pipelineDashboard.href = cfg.dashboardTasksUrl;
+        }
+      })
+      .catch(() => {});
 
     let pipelineController = null;
     let ws = null;
@@ -886,6 +896,9 @@
               strong.textContent = data.phase || "status";
               appendPipelineRow([strong, document.createTextNode(`${w} (${data.elapsed ?? 0}s)`)]);
             } else if (eventName === "started") {
+              if (data.dashboardUrl && pipelineDashboard) {
+                pipelineDashboard.href = data.dashboardUrl;
+              }
               appendPipelineRow([
                 document.createTextNode("Task run "),
                 (() => {

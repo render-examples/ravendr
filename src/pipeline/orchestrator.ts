@@ -11,6 +11,7 @@ import {
   completeWorkflowRun,
   failWorkflowRun,
 } from "../lib/db.js";
+import { getRenderDashboardTasksUrl } from "../lib/render-dashboard-url.js";
 
 const WORKFLOW_SLUG = process.env.WORKFLOW_SLUG ?? "ravendr-workflows";
 
@@ -20,8 +21,8 @@ function pollIntervalMs(): number {
   return Number.isFinite(n) && n >= 500 ? n : 4000;
 }
 
-export const DASHBOARD_TASKS_URL =
-  process.env.RENDER_DASHBOARD_TASKS_URL ?? "https://dashboard.render.com";
+/** Resolved at module load from env + validation; use getRenderDashboardTasksUrl() for the same rules. */
+export const DASHBOARD_TASKS_URL = getRenderDashboardTasksUrl();
 
 const TOOLS_INGEST = [
   "Render Workflows",
