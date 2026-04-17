@@ -2,13 +2,52 @@
 
 [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/ojusave/ravendr)
 
-A voice-first personal knowledge base. Talk to it, and it researches, fact-checks, stores, and recalls what you've discussed: across conversations.
+A voice-first personal knowledge base. You talk; it researches, fact-checks, stores, and recalls what you discussed across sessions.
+
+This repo is written as a **Render learning path**: the product is real, but the point is to see how [Render Workflows](https://render.com/workflows) and the [`@renderinc/sdk`](https://www.npmjs.com/package/@renderinc/sdk) fit together so the app is straightforward to deploy and safe to change.
+
+## Table of contents
+
+- [Highlights](#highlights)
+- [Why build it this way on Render](#why-build-it-this-way-on-render)
+- [How it works](#how-it-works)
+- [Prerequisites](#prerequisites)
+- [Deploy](#deploy)
+- [Configuration](#configuration)
+- [Project structure](#project-structure)
+- [API](#api)
+- [Troubleshooting](#troubleshooting)
+
+## Highlights
+
+- **Same SDK, two roles**: the workflow service registers work with `task()` from `@renderinc/sdk/workflows`; the web service triggers runs with `Render` from `@renderinc/sdk`. One dependency, two clear boundaries.
+- **Thin web, heavy tasks**: HTTP, WebSockets, and streaming stay in the Hono app. Research, Claude calls, and Postgres writes run in workflow tasks with their own plans, timeouts, and retries.
+- **Two trigger patterns you can copy**: fire-and-forget `startTask` for background ingest (voice can keep going), and `startTask` plus `.get()` when the voice agent must block on an answer (recall). The voice proxy and the optional HTTP pipeline endpoints both use the same slugs.
+- **Blueprint for the boring parts**: [`render.yaml`](render.yaml) stands up the web service and Postgres. You add the workflow service in the dashboard once; after that, most changes are “edit task code, redeploy the workflow,” not replumbing the whole stack.
+
+## Why build it this way on Render
+
+If you are learning Render, the useful idea is not “use workflows because the docs say so.” It is **where state and CPU live**.
+
+The browser talks to [AssemblyAI](https://www.assemblyai.com) over a WebSocket relay in `src/server.ts` and `src/voice/proxy.ts`. That connection should stay responsive. If you run long research loops and LLM calls in the same process as that relay, you risk timeouts, memory pressure, and noisy deploys: every research tweak becomes a web deploy.
+
+Render Workflows move that work to a **separate service** with isolated scaling and runtime settings. The web service only needs an API key and the SDK to **dispatch** work and optionally **wait** for a result.
+
+**Define tasks** in the workflow service (see `src/workflows/`). Each exported `task({ name, plan, timeoutSeconds, retry }, fn)` is one unit you can tune without touching the web tier. Example: `factCheck` in [`src/workflows/ingest.ts`](src/workflows/ingest.ts) uses a short timeout and retries tuned for a quick You.com pass.
+
+**Trigger tasks** from the web service with `new Render()` and `render.workflows.startTask(\`${WORKFLOW_SLUG}/ingest\`, [topic, claim])`. The string `${WORKFLOW_SLUG}/taskExportName` is the contract between services: it must match the workflow service name in the Render dashboard and the `name` you pass to `task()`.
+
+**Change behavior** by editing the task implementation and redeploying the workflow service. The web service keeps dispatching the same slug until you intentionally change arguments or add new tasks. That is the main payoff of the split: product iteration on agents and tools does not require redeploying the voice edge on every tweak.
+
+**Observe runs** in the Render dashboard (task runs, logs, failures). The UI also surfaces recent runs via Postgres-backed tracking; see `src/pipeline/orchestrator.ts` for how SSE phases mirror polling and `started.get()`.
+
+Together with the [langchain-example](https://github.com/ojusave/langchain-test) and [render-workflows-llamaindex](https://github.com/ojusave/render-workflows-llamaindex) repos in the same family, this layout shows the same “thin orchestrator, fat tasks” pattern in Python and Node so you can pick the stack you prefer without guessing how Render fits in.
 
 ## How it works
 
 ![Architecture](static/images/architecture.png)
 
-The web service proxies WebSocket audio between the browser and [AssemblyAI](https://www.assemblyai.com)'s voice agent. When the agent calls a tool, the server routes it to a [Render Workflow](https://render.com/workflows) that runs in the background.
+The web service proxies WebSocket audio between the browser and AssemblyAI’s voice agent. When the agent calls a tool, the server routes it to a Render Workflow that runs in the background.
 
 ![Workflow pipelines](static/images/pipelines.png)
 

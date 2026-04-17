@@ -43,4 +43,4 @@ services:
 
 databases:
   - name: ravendr-db
-    plan: starter
+    plan: basic-256mb
