@@ -69,7 +69,7 @@ Click **Deploy to Render** above. The [`render.yaml`](render.yaml) creates the w
 
 1. [Render Dashboard](https://dashboard.render.com) > **New** > **Workflow**
 2. Connect the same repo
-3. Build: `npm install && npm run build`
+3. Build: `npm ci && npm run build` (same as Blueprint; requires committed `package-lock.json`)
 4. Start: `node dist/workflows/index.js`
 5. Name: `ravendr-workflows` (must match `WORKFLOW_SLUG`)
 6. Env vars: `ANTHROPIC_API_KEY`, `YOU_API_KEY`, `DATABASE_URL` ([Internal URL](https://render.com/docs/databases#connecting-from-within-render)), `NODE_VERSION`: `22`
@@ -87,6 +87,8 @@ Click **Deploy to Render** above. The [`render.yaml`](render.yaml) creates the w
 | `ANTHROPIC_MODEL` | Workflow | `claude-sonnet-4-20250514` | Claude model ID |
 
 Optional on the web service only (add in the Dashboard **Environment** tab; omitted from [`render.yaml`](render.yaml) so Deploy stays short): `POLL_INTERVAL_MS`, `RENDER_DASHBOARD_TASKS_URL`.
+
+**Build time**: [`render.yaml`](render.yaml) uses `npm ci` (with [`package-lock.json`](package-lock.json)) and [`.npmrc`](.npmrc) skips npm audit during install. Render still has to download and install a large dependency tree (`@mastra/*` pulls a lot of packages): first builds or cache-cleared builds are slow. Avoid **Clear build cache & deploy** unless you need a clean `node_modules`. In **Workspace Settings** > **Build Pipeline**, Professional workspaces can switch to the **Performance** pipeline tier for heavier CPU or memory during builds ([docs](https://render.com/docs/build-pipeline)).
 
 ## Project structure
 

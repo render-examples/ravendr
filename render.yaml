@@ -3,7 +3,7 @@ services:
     name: ravendr-web
     runtime: node
     plan: starter
-    buildCommand: npm install && npm run build
+    buildCommand: npm ci && npm run build
     startCommand: node dist/server.js
     healthCheckPath: /health
     envVars:
