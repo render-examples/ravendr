@@ -6,7 +6,6 @@ import {
   completeWorkflowRun,
   failWorkflowRun,
   getRecentWorkflowRuns,
-  searchKnowledge,
 } from "../lib/db.js";
 
 const WORKFLOW_SLUG = process.env.WORKFLOW_SLUG ?? "ravendr-workflows";
@@ -132,6 +131,13 @@ export function createVoiceProxy(
 
   const pendingTools: { call_id: string; result: unknown }[] = [];
 
+  /**
+   * Process AssemblyAI messages one at a time. If we handle `tool.call` with async
+   * work while another `message` event runs, `reply.done` can be processed before
+   * `pendingTools` is populated, so `tool.result` is never sent and the agent hangs.
+   */
+  let assemblyMessageChain = Promise.resolve();
+
   assemblyWs.on("open", () => {
     assemblyWs.send(
       JSON.stringify({
@@ -141,54 +147,61 @@ export function createVoiceProxy(
     );
   });
 
-  assemblyWs.on("message", async (data: Buffer) => {
-    const event = JSON.parse(data.toString()) as Record<string, unknown>;
-    const eventType = event.type as string;
+  assemblyWs.on("message", (data: Buffer) => {
+    assemblyMessageChain = assemblyMessageChain
+      .then(async () => {
+        const event = JSON.parse(data.toString()) as Record<string, unknown>;
+        const eventType = event.type as string;
 
-    onEvent?.(event);
+        onEvent?.(event);
 
-    if (eventType === "tool.call") {
-      const name = event.name as string;
-      const args = (event.args ?? {}) as ToolArgs;
-      const callId = event.call_id as string;
+        if (eventType === "tool.call") {
+          const name = event.name as string;
+          const args = (event.args ?? {}) as ToolArgs;
+          const callId = event.call_id as string;
 
-      const handler = toolHandlers[name];
-      let result: unknown;
+          const handler = toolHandlers[name];
+          let result: unknown;
 
-      if (handler) {
-        try {
-          result = await handler(args);
-        } catch (err) {
-          result = {
-            error: err instanceof Error ? err.message : "Tool execution failed",
-          };
+          if (handler) {
+            try {
+              result = await handler(args);
+            } catch (err) {
+              result = {
+                error:
+                  err instanceof Error ? err.message : "Tool execution failed",
+              };
+            }
+          } else {
+            result = { error: `Unknown tool: ${name}` };
+          }
+
+          pendingTools.push({ call_id: callId, result });
+        } else if (eventType === "reply.done") {
+          const status = event.status as string | undefined;
+          if (status === "interrupted") {
+            pendingTools.length = 0;
+          } else if (pendingTools.length > 0) {
+            for (const tool of pendingTools) {
+              assemblyWs.send(
+                JSON.stringify({
+                  type: "tool.result",
+                  call_id: tool.call_id,
+                  result: JSON.stringify(tool.result),
+                })
+              );
+            }
+            pendingTools.length = 0;
+          }
         }
-      } else {
-        result = { error: `Unknown tool: ${name}` };
-      }
 
-      pendingTools.push({ call_id: callId, result });
-    } else if (eventType === "reply.done") {
-      const status = event.status as string | undefined;
-      if (status === "interrupted") {
-        pendingTools.length = 0;
-      } else if (pendingTools.length > 0) {
-        for (const tool of pendingTools) {
-          assemblyWs.send(
-            JSON.stringify({
-              type: "tool.result",
-              call_id: tool.call_id,
-              result: JSON.stringify(tool.result),
-            })
-          );
+        if (eventType !== "tool.call" && clientWs.readyState === WS.OPEN) {
+          clientWs.send(data.toString());
         }
-        pendingTools.length = 0;
-      }
-    }
-
-    if (eventType !== "tool.call" && clientWs.readyState === WS.OPEN) {
-      clientWs.send(data.toString());
-    }
+      })
+      .catch((err) => {
+        console.error("[voice-proxy] AssemblyAI message handler error:", err);
+      });
   });
 
   assemblyWs.on("error", (err) => {
