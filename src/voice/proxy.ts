@@ -1,78 +1,111 @@
 import { WebSocket as WS } from "ws";
 import { ASSEMBLYAI_WS_URL, SESSION_CONFIG } from "./config.js";
 import { Render } from "@renderinc/sdk";
+import { getRecentWorkflowRuns } from "../lib/db.js";
 import {
-  trackWorkflowRun,
-  completeWorkflowRun,
-  failWorkflowRun,
-  getRecentWorkflowRuns,
-} from "../lib/db.js";
-
-const WORKFLOW_SLUG = process.env.WORKFLOW_SLUG ?? "ravendr-workflows";
+  runIngestPipeline,
+  runRecallPipeline,
+  runReportPipeline,
+} from "../pipeline/orchestrator.js";
 
 type ToolArgs = Record<string, unknown>;
 
-async function handleLearnTopic(args: ToolArgs) {
+type PipelineChunk = { event: string; data: Record<string, unknown> };
+
+/**
+ * Same dispatch + poll + phase events as HTTP SSE (`pipeline/orchestrator.ts`),
+ * but events are sent to the browser over the voice WebSocket as `type: "pipeline"`.
+ */
+async function forwardPipeline(
+  clientWs: WS,
+  gen: AsyncGenerator<PipelineChunk>
+): Promise<
+  | { ok: true; result: Record<string, unknown>; taskRunId: string }
+  | { ok: false; message: string }
+> {
+  let taskRunId = "";
+  let result: Record<string, unknown> = {};
+
+  for await (const chunk of gen) {
+    if (clientWs.readyState === WS.OPEN) {
+      clientWs.send(
+        JSON.stringify({
+          type: "pipeline",
+          sseEvent: chunk.event,
+          data: chunk.data,
+        })
+      );
+    }
+
+    if (chunk.data.taskRunId && typeof chunk.data.taskRunId === "string") {
+      taskRunId = chunk.data.taskRunId;
+    }
+
+    if (chunk.event === "error") {
+      return {
+        ok: false,
+        message: String(chunk.data.message ?? "Pipeline error"),
+      };
+    }
+
+    if (chunk.event === "done" && chunk.data.result) {
+      result = chunk.data.result as Record<string, unknown>;
+      if (typeof chunk.data.taskRunId === "string") {
+        taskRunId = chunk.data.taskRunId;
+      }
+    }
+  }
+
+  return { ok: true, result, taskRunId };
+}
+
+async function handleLearnTopic(clientWs: WS, args: ToolArgs) {
   const topic = args.topic as string;
   const claim = args.claim as string;
-  const render = new Render();
-  const started = await render.workflows.startTask(
-    `${WORKFLOW_SLUG}/ingest`,
-    [topic, claim]
-  );
-  await trackWorkflowRun({
-    id: started.taskRunId,
-    type: "ingest",
-    input: { topic, claim },
-  });
+  const out = await forwardPipeline(clientWs, runIngestPipeline(topic, claim));
+  if (!out.ok) {
+    return { error: out.message, topic, claim };
+  }
   return {
-    taskRunId: started.taskRunId,
-    message: `Started learning about "${topic}". The research is running in the background.`,
+    taskRunId: out.taskRunId,
+    entryId: out.result.entryId,
+    confidence: out.result.confidence,
+    message: `Stored knowledge about "${topic}" (entry ${String(out.result.entryId ?? "").slice(0, 8)}…).`,
   };
 }
 
-async function handleRecallTopic(args: ToolArgs) {
+async function handleRecallTopic(clientWs: WS, args: ToolArgs) {
   const query = args.query as string;
-  const render = new Render();
-  const started = await render.workflows.startTask(
-    `${WORKFLOW_SLUG}/recall`,
-    [query]
-  );
-  await trackWorkflowRun({
-    id: started.taskRunId,
-    type: "recall",
-    input: { query },
-  });
-  try {
-    const finished = await started.get();
-    const result = finished.results[0] as {
-      briefing: string;
-      entryCount: number;
-      staleCount: number;
+  const out = await forwardPipeline(clientWs, runRecallPipeline(query));
+  if (!out.ok) {
+    return {
+      briefing: `Recall failed: ${out.message}`,
+      entryCount: 0,
+      staleCount: 0,
     };
-    await completeWorkflowRun(started.taskRunId, result);
-    return result;
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "Recall failed";
-    await failWorkflowRun(started.taskRunId, message);
-    return { briefing: `Couldn't recall info about "${query}". ${message}`, entryCount: 0, staleCount: 0 };
   }
+  const r = out.result as {
+    briefing?: string;
+    entryCount?: number;
+    staleCount?: number;
+  };
+  return {
+    briefing: r.briefing ?? "",
+    entryCount: r.entryCount ?? 0,
+    staleCount: r.staleCount ?? 0,
+    taskRunId: out.taskRunId,
+  };
 }
 
-async function handleGenerateReport() {
-  const render = new Render();
-  const started = await render.workflows.startTask(
-    `${WORKFLOW_SLUG}/report`,
-    []
-  );
-  await trackWorkflowRun({
-    id: started.taskRunId,
-    type: "report",
-    input: {},
-  });
+async function handleGenerateReport(clientWs: WS) {
+  const out = await forwardPipeline(clientWs, runReportPipeline());
+  if (!out.ok) {
+    return { error: out.message };
+  }
   return {
-    taskRunId: started.taskRunId,
-    message: "Started generating a synthesis report. This may take a minute or two.",
+    taskRunId: out.taskRunId,
+    report: out.result,
+    message: "Report task finished. Summarize key themes for the user from the result.",
   };
 }
 
@@ -82,32 +115,30 @@ async function handleCheckStatus(args: ToolArgs) {
   if (taskRunId) {
     try {
       const details = await render.workflows.getTaskRun(taskRunId);
-      return { status: details.status, details: `Task ${taskRunId} is ${details.status}.` };
+      return {
+        status: details.status,
+        details: `Task ${taskRunId} is ${details.status}.`,
+      };
     } catch {
-      return { status: "unknown", details: `Could not find task run ${taskRunId}.` };
+      return {
+        status: "unknown",
+        details: `Could not find task run ${taskRunId}.`,
+      };
     }
   }
   const recent = await getRecentWorkflowRuns(5);
-  if (recent.length === 0) return { status: "empty", details: "No recent workflow activity." };
+  if (recent.length === 0)
+    return { status: "empty", details: "No recent workflow activity." };
   const running = recent.filter((r) => r.status === "running");
   return {
     status: running.length > 0 ? `${running.length} running` : "all done",
-    details: recent
-      .map((r) => `${r.type}: ${r.status}`)
-      .join(", "),
+    details: recent.map((r) => `${r.type}: ${r.status}`).join(", "),
   };
 }
 
-const toolHandlers: Record<string, (args: ToolArgs) => Promise<unknown>> = {
-  learn_topic: handleLearnTopic,
-  recall_topic: handleRecallTopic,
-  generate_report: handleGenerateReport,
-  check_status: handleCheckStatus,
-};
-
 /**
  * Creates a proxy WebSocket connection between a browser client and AssemblyAI.
- * Handles tool calls by routing them to Render Workflows.
+ * Voice tools use the same Render Workflow orchestration as HTTP SSE (`/api/pipeline/*`).
  */
 export function createVoiceProxy(
   clientWs: WS,
@@ -160,20 +191,24 @@ export function createVoiceProxy(
           const args = (event.args ?? {}) as ToolArgs;
           const callId = event.call_id as string;
 
-          const handler = toolHandlers[name];
           let result: unknown;
 
-          if (handler) {
-            try {
-              result = await handler(args);
-            } catch (err) {
-              result = {
-                error:
-                  err instanceof Error ? err.message : "Tool execution failed",
-              };
+          try {
+            if (name === "learn_topic") {
+              result = await handleLearnTopic(clientWs, args);
+            } else if (name === "recall_topic") {
+              result = await handleRecallTopic(clientWs, args);
+            } else if (name === "generate_report") {
+              result = await handleGenerateReport(clientWs);
+            } else if (name === "check_status") {
+              result = await handleCheckStatus(args);
+            } else {
+              result = { error: `Unknown tool: ${name}` };
             }
-          } else {
-            result = { error: `Unknown tool: ${name}` };
+          } catch (err) {
+            result = {
+              error: err instanceof Error ? err.message : "Tool execution failed",
+            };
           }
 
           pendingTools.push({ call_id: callId, result });

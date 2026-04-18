@@ -700,6 +700,20 @@
         addMessage(event.text, "user");
       }
 
+      else if (t === "pipeline") {
+        const ev = event.sseEvent || "";
+        const phase = event.data?.phase ?? "";
+        const wf = event.data?.workflowStatus ?? "";
+        const elapsed = event.data?.elapsed ?? 0;
+        const tools = (event.data?.tools || []).join(", ");
+        const bits = [ev, phase || wf, tools].filter(Boolean);
+        const line = bits.join(" · ") + (elapsed !== undefined ? ` (${elapsed}s)` : "");
+        if (line) addMessage(line, "system");
+        if (event.data?.taskRunId && ev === "started") {
+          addWorkflow(event.data.taskRunId, "workflow", "running");
+        }
+      }
+
       else if (t === "transcript.agent") {
         addMessage(event.text, "agent");
 

@@ -22,7 +22,7 @@ This repo is written as a **Render learning path**: the product is real, but the
 
 - **Same SDK, two roles**: the workflow service registers work with `task()` from `@renderinc/sdk/workflows`; the web service triggers runs with `Render` from `@renderinc/sdk`. One dependency, two clear boundaries.
 - **Thin web, heavy tasks**: HTTP, WebSockets, and streaming stay in the Hono app. Research, Claude calls, and Postgres writes run in workflow tasks with their own plans, timeouts, and retries.
-- **Two trigger patterns you can copy**: fire-and-forget `startTask` for background ingest (voice can keep going), and `startTask` plus `.get()` when the voice agent must block on an answer (recall). The voice proxy and the optional HTTP pipeline endpoints both use the same slugs.
+- **Same orchestrator for voice and HTTP**: `src/pipeline/orchestrator.ts` dispatches workflow tasks, polls, and emits phase events. **`POST /api/pipeline/*`** streams them as SSE; **`/ws/voice`** runs the same generators and forwards each phase to the browser as `type: "pipeline"` (mirrors the langchain-example FastAPI + SSE pattern, but over the voice socket).
 - **Blueprint for the boring parts**: [`render.yaml`](render.yaml) stands up the web service and Postgres. You add the workflow service in the dashboard once; after that, most changes are “edit task code, redeploy the workflow,” not replumbing the whole stack.
 - **Four tools, one pipeline**: [AssemblyAI](https://www.assemblyai.com) handles voice tool calls on the web service. [You.com](https://you.com) supplies web evidence inside workflow tasks. [Mastra](https://github.com/mastra-ai/mastra) agents (`factCheckerAgent`, `connectorAgent`, `synthesizerAgent`) run structured judgments and prose in those same tasks via [`src/lib/mastra-workflow.ts`](src/lib/mastra-workflow.ts). [Render Workflows](https://render.com/workflows) executes the durable graph (fact-check, deep dive, connect, store, recall).
 
@@ -52,7 +52,7 @@ The web service proxies WebSocket audio between the browser and AssemblyAI’s v
 
 ![Workflow pipelines](static/images/pipelines.png)
 
-Two calling patterns: `startTask` alone for fire-and-forget (ingest runs while you keep talking), `startTask` + `.get()` when the voice agent needs a result before it can speak (recall).
+Voice and HTTP both wait on the same workflow runs: the orchestrator streams progress while ingest, recall, or report execute (voice shows phases in the chat as system lines).
 
 ## Prerequisites
 
