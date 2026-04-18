@@ -13,7 +13,7 @@ import {
 } from "../lib/db.js";
 import { getRenderDashboardTasksUrl } from "../lib/render-dashboard-url.js";
 
-const WORKFLOW_SLUG = process.env.WORKFLOW_SLUG ?? "ravendr-workflows";
+export const WORKFLOW_SLUG = process.env.WORKFLOW_SLUG ?? "ravendr-workflows";
 
 function pollIntervalMs(): number {
   const raw = process.env.POLL_INTERVAL_MS;
@@ -24,21 +24,21 @@ function pollIntervalMs(): number {
 /** Resolved at module load from env + validation; use getRenderDashboardTasksUrl() for the same rules. */
 export const DASHBOARD_TASKS_URL = getRenderDashboardTasksUrl();
 
-const TOOLS_INGEST = [
+export const TOOLS_INGEST = [
   "Render Workflows",
   "Mastra",
   "You.com",
   "Claude",
 ] as const;
 
-const TOOLS_RECALL = [
+export const TOOLS_RECALL = [
   "Render Workflows",
   "PostgreSQL",
   "You.com",
   "Claude",
 ] as const;
 
-const TOOLS_REPORT = [
+export const TOOLS_REPORT = [
   "Render Workflows",
   "PostgreSQL",
   "Claude",
@@ -88,7 +88,7 @@ function extractResult(results: unknown[]): Record<string, unknown> {
  * Polls `getTaskRun` for UI updates, and races the poll interval with
  * `started.get()` so completion uses the SDK wait path (task run events SSE).
  */
-async function* pollTaskRun(
+export async function* pollTaskRun(
   render: Render,
   started: StartedTask,
   signal: AbortSignal | undefined,

@@ -1,20 +1,55 @@
 import { WebSocket as WS } from "ws";
 import { ASSEMBLYAI_WS_URL, SESSION_CONFIG } from "./config.js";
 import { Render } from "@renderinc/sdk";
-import { getRecentWorkflowRuns } from "../lib/db.js";
+import { getRecentWorkflowRuns, trackWorkflowRun } from "../lib/db.js";
 import {
-  runIngestPipeline,
+  DASHBOARD_TASKS_URL,
+  pollTaskRun,
   runRecallPipeline,
-  runReportPipeline,
+  TOOLS_INGEST,
+  TOOLS_REPORT,
+  WORKFLOW_SLUG,
 } from "../pipeline/orchestrator.js";
 
 type ToolArgs = Record<string, unknown>;
 
 type PipelineChunk = { event: string; data: Record<string, unknown> };
 
+function sendPipelineEvent(clientWs: WS, chunk: PipelineChunk): void {
+  if (clientWs.readyState !== WS.OPEN) return;
+  clientWs.send(
+    JSON.stringify({
+      type: "pipeline",
+      sseEvent: chunk.event,
+      data: chunk.data,
+    })
+  );
+}
+
 /**
- * Same dispatch + poll + phase events as HTTP SSE (`pipeline/orchestrator.ts`),
- * but events are sent to the browser over the voice WebSocket as `type: "pipeline"`.
+ * Poll workflow run in the background so AssemblyAI receives `tool.result` quickly.
+ * If we await the full poll inside the tool handler, the serialized WS queue blocks
+ * and the model cannot speak until the workflow finishes (minutes of silence).
+ */
+function runPollInBackground(
+  clientWs: WS,
+  render: Render,
+  started: Awaited<ReturnType<Render["workflows"]["startTask"]>>,
+  tools: readonly string[]
+): void {
+  void (async () => {
+    try {
+      for await (const chunk of pollTaskRun(render, started, undefined, tools)) {
+        sendPipelineEvent(clientWs, chunk);
+      }
+    } catch (e) {
+      console.error("[voice-proxy] background workflow poll:", e);
+    }
+  })();
+}
+
+/**
+ * Full pipeline for tools that must block until done (recall briefing).
  */
 async function forwardPipeline(
   clientWs: WS,
@@ -27,15 +62,7 @@ async function forwardPipeline(
   let result: Record<string, unknown> = {};
 
   for await (const chunk of gen) {
-    if (clientWs.readyState === WS.OPEN) {
-      clientWs.send(
-        JSON.stringify({
-          type: "pipeline",
-          sseEvent: chunk.event,
-          data: chunk.data,
-        })
-      );
-    }
+    sendPipelineEvent(clientWs, chunk);
 
     if (chunk.data.taskRunId && typeof chunk.data.taskRunId === "string") {
       taskRunId = chunk.data.taskRunId;
@@ -59,21 +86,48 @@ async function forwardPipeline(
   return { ok: true, result, taskRunId };
 }
 
+/** Same dispatch + `started` as HTTP SSE, then background poll so voice is not silent for minutes. */
 async function handleLearnTopic(clientWs: WS, args: ToolArgs) {
   const topic = args.topic as string;
   const claim = args.claim as string;
-  const out = await forwardPipeline(clientWs, runIngestPipeline(topic, claim));
-  if (!out.ok) {
-    return { error: out.message, topic, claim };
-  }
+  const t0 = Date.now();
+  const render = new Render();
+
+  sendPipelineEvent(clientWs, {
+    event: "status",
+    data: { phase: "dispatching", elapsed: 0, tools: [...TOOLS_INGEST] },
+  });
+
+  const started = await render.workflows.startTask(
+    `${WORKFLOW_SLUG}/ingest`,
+    [topic, claim]
+  );
+
+  await trackWorkflowRun({
+    id: started.taskRunId,
+    type: "ingest",
+    input: { topic, claim },
+  });
+
+  sendPipelineEvent(clientWs, {
+    event: "started",
+    data: {
+      taskRunId: started.taskRunId,
+      dashboardUrl: DASHBOARD_TASKS_URL,
+      tools: [...TOOLS_INGEST],
+      elapsed: Math.floor((Date.now() - t0) / 1000),
+    },
+  });
+
+  runPollInBackground(clientWs, render, started, TOOLS_INGEST);
+
   return {
-    taskRunId: out.taskRunId,
-    entryId: out.result.entryId,
-    confidence: out.result.confidence,
-    message: `Stored knowledge about "${topic}" (entry ${String(out.result.entryId ?? "").slice(0, 8)}…).`,
+    taskRunId: started.taskRunId,
+    message: `Started learning about "${topic}". I will keep researching in the background.`,
   };
 }
 
+/** Blocks until briefing exists (same as HTTP recall). */
 async function handleRecallTopic(clientWs: WS, args: ToolArgs) {
   const query = args.query as string;
   const out = await forwardPipeline(clientWs, runRecallPipeline(query));
@@ -98,14 +152,41 @@ async function handleRecallTopic(clientWs: WS, args: ToolArgs) {
 }
 
 async function handleGenerateReport(clientWs: WS) {
-  const out = await forwardPipeline(clientWs, runReportPipeline());
-  if (!out.ok) {
-    return { error: out.message };
-  }
+  const t0 = Date.now();
+  const render = new Render();
+
+  sendPipelineEvent(clientWs, {
+    event: "status",
+    data: { phase: "dispatching", elapsed: 0, tools: [...TOOLS_REPORT] },
+  });
+
+  const started = await render.workflows.startTask(
+    `${WORKFLOW_SLUG}/report`,
+    []
+  );
+
+  await trackWorkflowRun({
+    id: started.taskRunId,
+    type: "report",
+    input: {},
+  });
+
+  sendPipelineEvent(clientWs, {
+    event: "started",
+    data: {
+      taskRunId: started.taskRunId,
+      dashboardUrl: DASHBOARD_TASKS_URL,
+      tools: [...TOOLS_REPORT],
+      elapsed: Math.floor((Date.now() - t0) / 1000),
+    },
+  });
+
+  runPollInBackground(clientWs, render, started, TOOLS_REPORT);
+
   return {
-    taskRunId: out.taskRunId,
-    report: out.result,
-    message: "Report task finished. Summarize key themes for the user from the result.",
+    taskRunId: started.taskRunId,
+    message:
+      "Started the full knowledge report in the background. I will summarize when it is ready if you ask, or check status.",
   };
 }
 
@@ -138,7 +219,8 @@ async function handleCheckStatus(args: ToolArgs) {
 
 /**
  * Creates a proxy WebSocket connection between a browser client and AssemblyAI.
- * Voice tools use the same Render Workflow orchestration as HTTP SSE (`/api/pipeline/*`).
+ * Voice tools use the same Render Workflow tasks as HTTP SSE; ingest/report return
+ * immediately so the voice model can speak while workflows run.
  */
 export function createVoiceProxy(
   clientWs: WS,

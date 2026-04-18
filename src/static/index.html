@@ -661,8 +661,12 @@
       };
 
       ws.onmessage = (event) => {
-        const data = JSON.parse(event.data);
-        handleEvent(data);
+        try {
+          const data = JSON.parse(event.data);
+          handleEvent(data);
+        } catch (e) {
+          console.warn("Non-JSON WS message", e);
+        }
       };
 
       ws.onclose = () => {
@@ -740,10 +744,17 @@
     let playbackCtx = null;
     let nextPlayTime = 0;
 
-    function playAudio(base64Data) {
+    async function playAudio(base64Data) {
       if (!playbackCtx) {
         playbackCtx = new AudioContext({ sampleRate: 24000 });
         nextPlayTime = playbackCtx.currentTime;
+      }
+      if (playbackCtx.state === "suspended") {
+        try {
+          await playbackCtx.resume();
+        } catch (e) {
+          console.warn("AudioContext.resume failed", e);
+        }
       }
 
       const raw = atob(base64Data);

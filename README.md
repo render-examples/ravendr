@@ -52,7 +52,7 @@ The web service proxies WebSocket audio between the browser and AssemblyAI’s v
 
 ![Workflow pipelines](static/images/pipelines.png)
 
-Voice and HTTP both wait on the same workflow runs: the orchestrator streams progress while ingest, recall, or report execute (voice shows phases in the chat as system lines).
+Voice uses the same tasks as HTTP: **ingest** and **report** return `tool.result` to AssemblyAI right after dispatch so the model can speak while work continues (poll runs in the background and still emits `pipeline` events). **Recall** waits for the briefing like the HTTP recall stream, so expect a longer pause until the workflow finishes.
 
 ## Prerequisites
 
