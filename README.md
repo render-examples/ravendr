@@ -23,6 +23,8 @@ This repo is written as a **Render learning path**: the product is real, but the
 - **Same SDK, two roles**: the workflow service registers work with `task()` from `@renderinc/sdk/workflows`; the web service triggers runs with `Render` from `@renderinc/sdk`. One dependency, two clear boundaries.
 - **Thin web, heavy tasks**: HTTP, WebSockets, and streaming stay in the Hono app. Research, Claude calls, and Postgres writes run in workflow tasks with their own plans, timeouts, and retries.
 - **Same orchestrator for voice and HTTP**: `src/pipeline/orchestrator.ts` dispatches workflow tasks, polls, and emits phase events. **`POST /api/pipeline/*`** streams them as SSE; **`/ws/voice`** runs the same generators and forwards each phase to the browser as `type: "pipeline"` (mirrors the langchain-example FastAPI + SSE pattern, but over the voice socket).
+- **Ports and adapters**: the web layer depends on small interfaces (`KnowledgeRepository`, `WorkflowRunRepository`, `TaskRunReader`) wired in [`src/composition.ts`](src/composition.ts). Postgres and the Render SDK live in `src/adapters/` so you can swap storage or workflow APIs without rewriting routes.
+- **One JSON contract**: non-streaming HTTP responses use `{ data, error, meta }` ([`src/shared/api-envelope.ts`](src/shared/api-envelope.ts)). The browser uses a single module ([`src/static/api-client.js`](src/static/api-client.js)) to unwrap that envelope. SSE pipeline bodies stay event-stream (not wrapped).
 - **Blueprint for the boring parts**: [`render.yaml`](render.yaml) stands up the web service and Postgres. You add the workflow service in the dashboard once; after that, most changes are “edit task code, redeploy the workflow,” not replumbing the whole stack.
 - **Four tools, one pipeline**: [AssemblyAI](https://www.assemblyai.com) handles voice tool calls on the web service. [You.com](https://you.com) supplies web evidence inside workflow tasks. [Mastra](https://github.com/mastra-ai/mastra) agents (`factCheckerAgent`, `connectorAgent`, `synthesizerAgent`) run structured judgments and prose in those same tasks via [`src/lib/mastra-workflow.ts`](src/lib/mastra-workflow.ts). [Render Workflows](https://render.com/workflows) executes the durable graph (fact-check, deep dive, connect, store, recall).
 
@@ -95,18 +97,18 @@ Optional on the web service only (add in the Dashboard **Environment** tab; omit
 ```
 src/
   server.ts              Hono web server (HTTP + WebSocket)
+  composition.ts         Wires ports to adapters
+  shared/api-envelope.ts JSON response envelope helpers
+  ports/                 Repository and task-run reader interfaces
+  adapters/              Postgres + Render SDK implementations
   voice/
     config.ts            AssemblyAI session config and tool definitions
     proxy.ts             WebSocket proxy: browser <> AssemblyAI <> Workflows
   agents/
-    index.ts             Supervisor agent + sub-agent composition
     fact-checker.ts      Scores claim confidence against evidence
     synthesizer.ts       Voice-friendly summaries
     connector.ts         Cross-topic relationship detection
-  tools/
-    learn.ts             learn_topic > Ingest workflow
-    recall.ts            recall_topic > Recall workflow
-    report.ts            generate_report > Report workflow
+    ingest-research.ts   Mastra tools for quick/deep search in ingest
   workflows/
     index.ts             Workflow entry point
     ingest.ts            factCheck + deepDive > connect > store
@@ -116,21 +118,41 @@ src/
     db.ts                PostgreSQL schema + queries
     you-client.ts        You.com Research API wrapper
     mastra-workflow.ts   Mastra agents + You.com evidence inside tasks
-  static/index.html      Voice UI and workflow activity panel
+  static/
+    index.html           Voice UI shell
+    app.js               UI logic (ES module)
+    api-client.js        Single client for JSON APIs + SSE helpers
 render.yaml              Render Blueprint
 ```
 
 ## API
 
-**`WebSocket /ws/voice`**: proxies audio between browser and AssemblyAI. Intercepts tool calls and routes to Render Workflows.
+**JSON responses** (everything except SSE streams) use:
 
-**`GET /api/workflows/recent`**: 10 most recent workflow runs.
+```json
+{ "data": <T | null>, "error": { "code": "...", "message": "..." } | null, "meta": {} }
+```
 
-**`GET /api/knowledge`**: all knowledge entries.
+Success: `error` is `null` and the payload is in `data`. Errors: HTTP status reflects the failure; `error.code` and `error.message` are stable for clients.
 
-**`GET /api/report/:taskRunId`**: result of a completed report task.
+| Method | Path | Notes |
+|--------|------|--------|
+| GET | `/health` | `data`: `{ "status": "ok", "service": "ravendr-web" }` |
+| GET | `/api/config` | `data`: `{ dashboardTasksUrl }` |
+| GET | `/api/workflows/recent` | `data`: recent workflow run rows |
+| GET | `/api/knowledge` | `data`: knowledge entries |
+| GET | `/api/report/:taskRunId` | `data`: task result object, or `{ status }` while pending |
+| POST | `/api/pipeline/ingest` | Body: `topic`, `claim` — **SSE** phases (not envelope) |
+| POST | `/api/pipeline/recall` | Body: `query` — **SSE** phases |
+| POST | `/api/pipeline/report` | **SSE** phases |
+| WS | `/ws/voice` | Voice session (off if `ENABLE_VOICE_WEBSOCKET=false`) |
+| GET | `/` | Static UI |
 
-**`GET /health`**: `{ "status": "ok" }`.
+**WebSocket `/ws/voice`**: proxies audio between browser and AssemblyAI; tool calls route to Render Workflows (same orchestration as HTTP SSE).
+
+### Monorepo (optional)
+
+If this folder lives inside a monorepo (e.g. **Samples**), use the repository root [`render.yaml`](../render.yaml) for preview environments and multi-service deploy.
 
 ## Troubleshooting
 

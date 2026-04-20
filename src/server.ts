@@ -4,60 +4,59 @@ import { getRequestListener } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { createServer } from "http";
 import { WebSocketServer, WebSocket } from "ws";
-import { initDb, getRecentWorkflowRuns, getAllKnowledge } from "./lib/db.js";
+import { initDb } from "./lib/db.js";
 import { createVoiceProxy } from "./voice/proxy.js";
-import { Render } from "@renderinc/sdk";
 import {
   runIngestPipeline,
   runRecallPipeline,
   runReportPipeline,
 } from "./pipeline/orchestrator.js";
 import { getRenderDashboardTasksUrl } from "./lib/render-dashboard-url.js";
+import { createAppDeps } from "./composition.js";
+import { ok, fail } from "./shared/api-envelope.js";
 
 const app = new Hono();
+const deps = createAppDeps();
 const PORT = parseInt(process.env.PORT ?? "3000", 10);
 
 function isTaskSuccess(status: string): boolean {
   return status === "completed" || status === "succeeded";
 }
 
-app.get("/health", (c) => c.json({ status: "ok", service: "ravendr-web" }));
+app.get("/health", (c) => c.json(ok({ status: "ok", service: "ravendr-web" })));
 
 app.get("/api/config", (c) =>
-  c.json({
-    dashboardTasksUrl: getRenderDashboardTasksUrl(),
-  })
+  c.json(ok({ dashboardTasksUrl: getRenderDashboardTasksUrl() }))
 );
 
 app.get("/api/workflows/recent", async (c) => {
   try {
-    const runs = await getRecentWorkflowRuns(10);
-    return c.json(runs);
-  } catch (err) {
-    return c.json({ error: "Failed to fetch workflows" }, 500);
+    const runs = await deps.workflowRuns.listRecent(10);
+    return c.json(ok(runs));
+  } catch {
+    return c.json(fail("WORKFLOWS_FETCH_FAILED", "Failed to fetch workflows"), 500);
   }
 });
 
 app.get("/api/knowledge", async (c) => {
   try {
-    const entries = await getAllKnowledge();
-    return c.json(entries);
-  } catch (err) {
-    return c.json({ error: "Failed to fetch knowledge" }, 500);
+    const entries = await deps.knowledge.getAll();
+    return c.json(ok(entries));
+  } catch {
+    return c.json(fail("KNOWLEDGE_FETCH_FAILED", "Failed to fetch knowledge"), 500);
   }
 });
 
 app.get("/api/report/:taskRunId", async (c) => {
   const { taskRunId } = c.req.param();
   try {
-    const render = new Render();
-    const details = await render.workflows.getTaskRun(taskRunId);
+    const details = await deps.taskRuns.getTaskRun(taskRunId);
     if (isTaskSuccess(details.status) && details.results.length > 0) {
-      return c.json(details.results[0]);
+      return c.json(ok(details.results[0]));
     }
-    return c.json({ status: details.status });
+    return c.json(ok({ status: details.status }));
   } catch {
-    return c.json({ error: "Task run not found" }, 404);
+    return c.json(fail("TASK_RUN_NOT_FOUND", "Task run not found"), 404);
   }
 });
 
@@ -67,10 +66,10 @@ app.post("/api/pipeline/ingest", async (c) => {
   try {
     body = await c.req.json();
   } catch {
-    return c.json({ error: "Invalid JSON" }, 400);
+    return c.json(fail("INVALID_JSON", "Invalid JSON"), 400);
   }
   if (!body.topic?.trim() || !body.claim?.trim()) {
-    return c.json({ error: "topic and claim are required" }, 400);
+    return c.json(fail("VALIDATION_ERROR", "topic and claim are required"), 400);
   }
   const signal = c.req.raw.signal;
   return streamSSE(c, async (stream) => {
@@ -104,10 +103,10 @@ app.post("/api/pipeline/recall", async (c) => {
   try {
     body = await c.req.json();
   } catch {
-    return c.json({ error: "Invalid JSON" }, 400);
+    return c.json(fail("INVALID_JSON", "Invalid JSON"), 400);
   }
   if (!body.query?.trim()) {
-    return c.json({ error: "query is required" }, 400);
+    return c.json(fail("VALIDATION_ERROR", "query is required"), 400);
   }
   const signal = c.req.raw.signal;
   return streamSSE(c, async (stream) => {
@@ -176,16 +175,20 @@ async function start() {
 
   const server = createServer(getRequestListener(app.fetch));
 
-  const wss = new WebSocketServer({ server, path: "/ws/voice" });
-
-  wss.on("connection", (clientWs: WebSocket) => {
-    console.log("Voice client connected");
-    createVoiceProxy(clientWs, (event) => {
-      const t = event.type as string;
-      if (t === "session.ready") console.log("Voice session ready");
-      if (t === "error") console.error("Voice error:", event.message);
+  const voiceEnabled = process.env.ENABLE_VOICE_WEBSOCKET !== "false";
+  if (voiceEnabled) {
+    const wss = new WebSocketServer({ server, path: "/ws/voice" });
+    wss.on("connection", (clientWs: WebSocket) => {
+      console.log("Voice client connected");
+      createVoiceProxy(clientWs, (event) => {
+        const t = event.type as string;
+        if (t === "session.ready") console.log("Voice session ready");
+        if (t === "error") console.error("Voice error:", event.message);
+      });
     });
-  });
+  } else {
+    console.warn("Voice WebSocket disabled (ENABLE_VOICE_WEBSOCKET=false)");
+  }
 
   server.listen(PORT, "0.0.0.0", () => {
     console.log(`Ravendr server listening on 0.0.0.0:${PORT}`);

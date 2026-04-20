@@ -4,12 +4,12 @@ import { Render } from "@renderinc/sdk";
 import { getRecentWorkflowRuns, trackWorkflowRun } from "../lib/db.js";
 import {
   DASHBOARD_TASKS_URL,
-  pollTaskRun,
   runRecallPipeline,
   TOOLS_INGEST,
   TOOLS_REPORT,
   WORKFLOW_SLUG,
 } from "../pipeline/orchestrator.js";
+import { pollTaskRun } from "../pipeline/poll-task.js";
 
 type ToolArgs = Record<string, unknown>;
 
