@@ -2,13 +2,14 @@
 
 [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/ojusave/ravendr)
 
-A voice-first personal knowledge base. You talk; it researches, fact-checks, stores, and recalls what you discussed across sessions.
+A **workflow-first** knowledge demo: the straightforward path is **HTTP + SSE** (same mental model as [render-workflows-llamaindex](https://github.com/ojusave/render-workflows-llamaindex)—thin web service, `startTask`, task worker). Optional **voice** (AssemblyAI) calls the same tasks when the model uses tools.
 
 This repo is written as a **Render learning path**: the product is real, but the point is to see how [Render Workflows](https://render.com/workflows) and the [`@renderinc/sdk`](https://www.npmjs.com/package/@renderinc/sdk) fit together so the app is straightforward to deploy and safe to change.
 
 ## Table of contents
 
 - [Highlights](#highlights)
+- [Same shape as `llamaindex-example`](#same-shape-as-llamaindex-example)
 - [Why build it this way on Render](#why-build-it-this-way-on-render)
 - [How it works](#how-it-works)
 - [Prerequisites](#prerequisites)
@@ -28,6 +29,19 @@ This repo is written as a **Render learning path**: the product is real, but the
 - **Blueprint for the boring parts**: [`render.yaml`](render.yaml) stands up the web service and Postgres. You add the workflow service in the dashboard once; after that, most changes are “edit task code, redeploy the workflow,” not replumbing the whole stack.
 - **Four tools, one pipeline**: [AssemblyAI](https://www.assemblyai.com) handles voice tool calls on the web service. [You.com](https://you.com) supplies web evidence inside workflow tasks. [Mastra](https://github.com/mastra-ai/mastra) agents (`factCheckerAgent`, `connectorAgent`, `synthesizerAgent`) run structured judgments and prose in those same tasks via [`src/lib/mastra-workflow.ts`](src/lib/mastra-workflow.ts). [Render Workflows](https://render.com/workflows) executes the durable graph (fact-check, deep dive, connect, store, recall).
 
+## Same shape as `llamaindex-example`
+
+If you know [render-workflows-llamaindex](https://github.com/ojusave/render-workflows-llamaindex), Ravendr is the same **three-layer** layout with different domain tasks:
+
+| Layer | Document pipeline (llamaindex) | Ravendr |
+| --- | --- | --- |
+| Web | Express: upload → SSE progress | Hono: `POST /api/pipeline/*` → SSE progress |
+| Orchestration | [`pipeline/orchestrator.ts`](https://github.com/ojusave/render-workflows-llamaindex/blob/main/pipeline/orchestrator.ts) chains tasks | [`src/pipeline/orchestrator.ts`](src/pipeline/orchestrator.ts) dispatches `ingest` / `recall` / `report` |
+| Worker | [`tasks/index.js`](https://github.com/ojusave/render-workflows-llamaindex) registers tasks | [`src/tasks/index.ts`](src/tasks/index.ts) registers tasks |
+| Extra | — | Optional `/ws/voice` + AssemblyAI (same `startTask` as HTTP) |
+
+**Canonical demo:** use the **Knowledge pipeline** buttons on the home page (HTTP). Voice is additive, not required to understand Render Workflows.
+
 ## Why build it this way on Render
 
 If you are learning Render, the useful idea is not “use workflows because the docs say so.” It is **where state and CPU live**.
@@ -36,7 +50,7 @@ The browser talks to [AssemblyAI](https://www.assemblyai.com) over a WebSocket r
 
 Render Workflows move that work to a **separate service** with isolated scaling and runtime settings. The web service only needs an API key and the SDK to **dispatch** work and optionally **wait** for a result.
 
-**Define tasks** in the workflow service (see `src/workflows/`). Each exported `task({ name, plan, timeoutSeconds, retry }, fn)` is one unit you can tune without touching the web tier. Ingest combines You.com search with Mastra structured outputs in [`src/lib/mastra-workflow.ts`](src/lib/mastra-workflow.ts), then stores to Postgres. Example: `factCheck` in [`src/workflows/ingest.ts`](src/workflows/ingest.ts) calls You.com `quickSearch` and passes evidence into the Mastra fact-checker agent.
+**Define tasks** in the workflow service (see `src/tasks/`). Each exported `task({ name, plan, timeoutSeconds, retry }, fn)` is one unit you can tune without touching the web tier. Ingest combines You.com search with Mastra structured outputs in [`src/lib/mastra-workflow.ts`](src/lib/mastra-workflow.ts), then stores to Postgres. Example: `factCheck` in [`src/tasks/ingest.ts`](src/tasks/ingest.ts) calls You.com `quickSearch` and passes evidence into the Mastra fact-checker agent.
 
 **Trigger tasks** from the web service with `new Render()` and `render.workflows.startTask(\`${WORKFLOW_SLUG}/ingest\`, [topic, claim])`. The string `${WORKFLOW_SLUG}/taskExportName` is the contract between services: it must match the workflow service name in the Render dashboard and the `name` you pass to `task()`.
 
@@ -50,11 +64,11 @@ Together with the [langchain-example](https://github.com/ojusave/langchain-test)
 
 ![Architecture](static/images/architecture.png)
 
-The web service proxies WebSocket audio between the browser and AssemblyAI’s voice agent. When the agent calls a tool, the server routes it to a Render Workflow that runs in the background.
+**Primary path:** the browser calls `POST /api/pipeline/*`; the web service `startTask`s Render Workflows and streams SSE phases—same idea as uploading a file in the document pipeline example.
 
 ![Workflow pipelines](static/images/pipelines.png)
 
-Voice uses the same tasks as HTTP: **ingest** and **report** return `tool.result` to AssemblyAI right after dispatch so the model can speak while work continues (poll runs in the background and still emits `pipeline` events). **Recall** waits for the briefing like the HTTP recall stream, so expect a longer pause until the workflow finishes.
+**Optional voice:** the web service proxies WebSocket audio to AssemblyAI. When the agent calls a tool, it hits the same tasks as HTTP. **ingest** and **report** return `tool.result` right after dispatch so the model can speak while work continues (polling still emits `pipeline` events). **Recall** waits for the briefing like the HTTP recall stream.
 
 ## Prerequisites
 
@@ -72,7 +86,7 @@ Click **Deploy to Render** above. The [`render.yaml`](render.yaml) creates the w
 1. [Render Dashboard](https://dashboard.render.com) > **New** > **Workflow**
 2. Connect the same repo
 3. Build: `npm ci && npm run build` (same as Blueprint; requires committed `package-lock.json`)
-4. Start: `node dist/workflows/index.js`
+4. Start: `node dist/tasks/index.js`
 5. Name: `ravendr-workflows` (must match `WORKFLOW_SLUG`)
 6. Env vars: `ANTHROPIC_API_KEY`, `YOU_API_KEY`, `DATABASE_URL` ([Internal URL](https://render.com/docs/databases#connecting-from-within-render)), `NODE_VERSION`: `22`
 
@@ -109,8 +123,8 @@ src/
     synthesizer.ts       Voice-friendly summaries
     connector.ts         Cross-topic relationship detection
     ingest-research.ts   Mastra tools for quick/deep search in ingest
-  workflows/
-    index.ts             Workflow entry point
+  tasks/
+    index.ts             Task entry point (register with Render Workflows)
     ingest.ts            factCheck + deepDive > connect > store
     recall.ts            search > freshen > synthesize
     report.ts            gather > cluster > crossRef (parallel) > generate
@@ -156,7 +170,7 @@ If this folder lives inside a monorepo (e.g. **Samples**), use the repository ro
 
 ## Troubleshooting
 
-**Deploy fails or health check never goes green**: the web process listens on `0.0.0.0` and `PORT` (set by Render). The HTTP server must use Hono’s Node adapter (`getRequestListener` from `@hono/node-server`), not raw `createServer(app.fetch)`, or static file middleware can throw `this.raw.headers.get is not a function` during health checks. Confirm **Build** logs show `npm run build` succeeding and **Shell** start command is `node dist/server.js` from the repo root. If the **workflow** service failed, open its logs: it needs `DATABASE_URL` (Internal URL), `YOU_API_KEY`, `ANTHROPIC_API_KEY`, and a start command that runs the compiled entry (for example `node dist/workflows/index.js` after the same build as the web service).
+**Deploy fails or health check never goes green**: the web process listens on `0.0.0.0` and `PORT` (set by Render). The HTTP server must use Hono’s Node adapter (`getRequestListener` from `@hono/node-server`), not raw `createServer(app.fetch)`, or static file middleware can throw `this.raw.headers.get is not a function` during health checks. Confirm **Build** logs show `npm run build` succeeding and **Shell** start command is `node dist/server.js` from the repo root. If the **workflow** service failed, open its logs: it needs `DATABASE_URL` (Internal URL), `YOU_API_KEY`, `ANTHROPIC_API_KEY`, and a start command that runs the compiled entry (`node dist/tasks/index.js` after the same build as the web service).
 
 **Voice connection fails**: check `ASSEMBLYAI_API_KEY` is set on the web service.
 

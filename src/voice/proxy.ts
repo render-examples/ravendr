@@ -10,6 +10,11 @@ import {
   WORKFLOW_SLUG,
 } from "../pipeline/orchestrator.js";
 import { pollTaskRun } from "../pipeline/poll-task.js";
+import {
+  matchTranscriptPipelineIntent,
+  shouldSkipDuplicateDispatch,
+  type TranscriptPipelineIntent,
+} from "./transcript-dispatch.js";
 
 type ToolArgs = Record<string, unknown>;
 
@@ -190,6 +195,38 @@ async function handleGenerateReport(clientWs: WS) {
   };
 }
 
+/**
+ * When the voice model answers without tool.call, final transcripts can still
+ * start the same Render Workflows (recall / report / learn) server-side.
+ */
+async function dispatchFromTranscript(
+  clientWs: WS,
+  intent: TranscriptPipelineIntent
+): Promise<void> {
+  if (shouldSkipDuplicateDispatch(intent)) {
+    console.info("[voice-proxy] transcript dispatch skipped (dedupe)", intent.kind);
+    return;
+  }
+  console.info(
+    "[voice-proxy] transcript dispatch (workflows run without tool.call from model)",
+    intent
+  );
+  try {
+    if (intent.kind === "recall") {
+      await handleRecallTopic(clientWs, { query: intent.query });
+    } else if (intent.kind === "report") {
+      await handleGenerateReport(clientWs);
+    } else {
+      await handleLearnTopic(clientWs, {
+        topic: intent.topic,
+        claim: intent.claim,
+      });
+    }
+  } catch (err) {
+    console.error("[voice-proxy] transcript dispatch failed:", err);
+  }
+}
+
 async function handleCheckStatus(args: ToolArgs) {
   const taskRunId = args.taskRunId as string | undefined;
   const render = new Render();
@@ -226,6 +263,8 @@ export function createVoiceProxy(
   clientWs: WS,
   onEvent?: (event: Record<string, unknown>) => void
 ) {
+  console.info("[voice-proxy] WORKFLOW_SLUG=%s", WORKFLOW_SLUG);
+
   const apiKey = process.env.ASSEMBLYAI_API_KEY;
   if (!apiKey) {
     clientWs.send(
@@ -268,10 +307,25 @@ export function createVoiceProxy(
 
         onEvent?.(event);
 
+        if (
+          eventType === "transcript.user" &&
+          process.env.VOICE_TRANSCRIPT_DISPATCH !== "0"
+        ) {
+          const raw = event.text;
+          if (typeof raw === "string") {
+            const intent = matchTranscriptPipelineIntent(raw);
+            if (intent) {
+              void dispatchFromTranscript(clientWs, intent);
+            }
+          }
+        }
+
         if (eventType === "tool.call") {
           const name = event.name as string;
           const args = (event.args ?? {}) as ToolArgs;
           const callId = event.call_id as string;
+
+          console.info(`[voice-proxy] tool.call ${name}`, args);
 
           let result: unknown;
 

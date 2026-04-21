@@ -472,33 +472,11 @@
   </header>
 
   <div id="main">
-    <div class="welcome" id="welcome">
-      <h2>Build your knowledge base with voice</h2>
-      <p>
-        Talk about any topic and Ravendr will research, fact-check, and store it.
-        Ask what you know, and it recalls with freshness checks.
-        Request a report for a full synthesis across everything you've learned:
-        all orchestrated as durable
-        <a href="https://render.com/workflows" target="_blank" rel="noopener">Render Workflow</a> tasks.
-      </p>
-      <div class="mic-area">
-        <button class="mic-btn" id="mic-btn" title="Start conversation">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
-            <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
-            <line x1="12" y1="19" x2="12" y2="23"/>
-            <line x1="8" y1="23" x2="16" y2="23"/>
-          </svg>
-        </button>
-        <span class="mic-label" id="mic-label">Click to start</span>
-      </div>
-    </div>
-
-    <!-- Outside #welcome so it stays visible when the voice UI hides the hero (session.ready). -->
+    <!-- Primary path (same idea as render-workflows-llamaindex: HTTP triggers tasks, SSE shows progress). -->
     <div class="pipeline-card" id="pipeline-card">
-      <h3 class="pipeline-title">Workflow pipeline (HTTP SSE + voice)</h3>
+      <h3 class="pipeline-title">Knowledge pipeline (start here)</h3>
       <p class="pipeline-hint">
-        Same <strong>status / started / done / error</strong> phases as the server: use the buttons for HTTP streaming, or speak and watch voice-driven runs append here (WebSocket <code>pipeline</code> events).
+        <strong>Main demo:</strong> run ingest, recall, or report below—your browser streams the same <code>status → started → done</code> phases as the document pipeline example. Optional voice sits under this; it only runs tasks when the agent calls a tool.
       </p>
       <div class="pipeline-meta">
         <span class="pipeline-timer" id="pipeline-timer">0s elapsed</span>
@@ -533,6 +511,24 @@
       </div>
       <div class="pipeline-error" id="pipeline-error"></div>
       <div class="pipeline-feed" id="pipeline-feed"></div>
+    </div>
+
+    <div class="welcome" id="welcome">
+      <h2>Optional: voice</h2>
+      <p>
+        Same <a href="https://render.com/workflows" target="_blank" rel="noopener">Render Workflow</a> tasks as the buttons—via AssemblyAI when the model invokes learn / recall / report tools.
+      </p>
+      <div class="mic-area">
+        <button class="mic-btn" id="mic-btn" title="Start conversation">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+            <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+            <line x1="12" y1="19" x2="12" y2="23"/>
+            <line x1="8" y1="23" x2="16" y2="23"/>
+          </svg>
+        </button>
+        <span class="mic-label" id="mic-label">Click to start</span>
+      </div>
     </div>
 
     <div class="conversation" id="conversation"></div>

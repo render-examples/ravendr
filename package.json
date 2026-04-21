@@ -10,7 +10,8 @@
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
     "start": "node dist/server.js",
-    "workflows": "tsx src/workflows/index.ts"
+    "tasks": "tsx src/tasks/index.ts",
+    "workflows": "npm run tasks"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
