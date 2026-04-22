@@ -1,5 +1,5 @@
-import { getAllKnowledge } from "../lib/db.js";
-import type { KnowledgeRepository } from "../ports/knowledge-repository.js";
+import { getAllKnowledge } from "./db.js";
+import type { KnowledgeRepository } from "../../ports/knowledge-repository.js";
 
 export function createPgKnowledgeRepository(): KnowledgeRepository {
   return {

@@ -1,10 +1,10 @@
 import { task } from "@renderinc/sdk/workflows";
-import { quickSearch } from "../lib/you-client.js";
-import { ask } from "../lib/llm.js";
-import { mastraVoiceBriefing } from "../lib/mastra-workflow.js";
-import { ensureMastraMemory } from "../lib/mastra-memory.js";
-import { searchKnowledge, markStale } from "../lib/db.js";
-import type { KnowledgeEntry } from "../lib/db.js";
+import { quickSearch } from "../../youcom/you-client.js";
+import { ask } from "../../mastra/llm.js";
+import { mastraVoiceBriefing } from "../../mastra/mastra-workflow.js";
+import { ensureMastraMemory } from "../../mastra/mastra-memory.js";
+import { searchKnowledge, markStale } from "../postgres/db.js";
+import type { KnowledgeEntry } from "../postgres/db.js";
 
 /**
  * Searches the knowledge base for entries matching the query.

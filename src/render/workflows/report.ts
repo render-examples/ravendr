@@ -1,7 +1,7 @@
 import { task } from "@renderinc/sdk/workflows";
-import { ask, parseJson } from "../lib/llm.js";
-import { getAllKnowledge } from "../lib/db.js";
-import type { KnowledgeEntry } from "../lib/db.js";
+import { ask, parseJson } from "../../mastra/llm.js";
+import { getAllKnowledge } from "../postgres/db.js";
+import type { KnowledgeEntry } from "../postgres/db.js";
 
 /**
  * Gathers all knowledge entries from the database.

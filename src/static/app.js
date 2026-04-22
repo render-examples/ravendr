@@ -37,6 +37,79 @@ const btnPipeRecall = document.getElementById("btn-pipe-recall");
 const btnPipeReport = document.getElementById("btn-pipe-report");
 const btnPipeCancel = document.getElementById("btn-pipe-cancel");
 const pipelineDashboard = document.getElementById("pipeline-dashboard");
+const pipelineResult = document.getElementById("pipeline-result");
+const pipelineResultContent = document.getElementById("pipeline-result-content");
+
+// Tech step elements
+const techSteps = {
+  workflows: {
+    el: document.getElementById("step-workflows"),
+    status: document.getElementById("status-workflows"),
+    detail: document.getElementById("detail-workflows"),
+    time: document.getElementById("time-workflows"),
+    startTime: null,
+  },
+  youcom: {
+    el: document.getElementById("step-youcom"),
+    status: document.getElementById("status-youcom"),
+    detail: document.getElementById("detail-youcom"),
+    time: document.getElementById("time-youcom"),
+    startTime: null,
+  },
+  mastra: {
+    el: document.getElementById("step-mastra"),
+    status: document.getElementById("status-mastra"),
+    detail: document.getElementById("detail-mastra"),
+    time: document.getElementById("time-mastra"),
+    startTime: null,
+  },
+  complete: {
+    el: document.getElementById("step-complete"),
+    status: document.getElementById("status-complete"),
+    detail: document.getElementById("detail-complete"),
+    time: document.getElementById("time-complete"),
+    startTime: null,
+  },
+};
+
+function setTechStep(stepName, state, statusText, detailText = "") {
+  const step = techSteps[stepName];
+  if (!step) return;
+
+  // Update class
+  step.el.className = `tech-step ${state}`;
+
+  // Update status text
+  if (statusText) step.status.textContent = statusText;
+  if (detailText) step.detail.textContent = detailText;
+
+  // Handle timing
+  if (state === "active" && !step.startTime) {
+    step.startTime = Date.now();
+    step.time.textContent = "0.0s";
+  } else if (state === "done" || state === "error") {
+    if (step.startTime) {
+      const elapsed = ((Date.now() - step.startTime) / 1000).toFixed(1);
+      step.time.textContent = `${elapsed}s`;
+    }
+  }
+}
+
+function resetTechPipeline() {
+  for (const [name, step] of Object.entries(techSteps)) {
+    step.el.className = "tech-step waiting";
+    step.startTime = null;
+    step.time.textContent = "—";
+    step.detail.textContent = "";
+  }
+  techSteps.workflows.status.textContent = "Waiting to dispatch task...";
+  techSteps.youcom.status.textContent = "Waiting for task...";
+  techSteps.mastra.status.textContent = "Waiting for research...";
+  techSteps.complete.status.textContent = "Waiting for synthesis...";
+
+  pipelineResult.classList.remove("visible");
+  pipelineResultContent.textContent = "";
+}
 
 apiGetJson("/api/config")
   .then((cfg) => {
@@ -283,7 +356,8 @@ function resetPipelineUi() {
   pipelineFeed.innerHTML = "";
   pipelineError.textContent = "";
   pipelineError.classList.remove("visible");
-  pipelineTimer.textContent = "0s elapsed";
+  pipelineTimer.textContent = "Ready";
+  resetTechPipeline();
 }
 
 function appendPipelineRow(parts, variant = "") {
@@ -300,18 +374,112 @@ function appendPipelineRow(parts, variant = "") {
   pipelineFeed.scrollTop = pipelineFeed.scrollHeight;
 }
 
+/** Update tech pipeline visualization based on SSE events */
+function updateTechPipelineFromEvent(eventName, data) {
+  const phase = data.phase || "";
+  const techPhase = data.techPhase || "";
+  const elapsed = data.elapsed || 0;
+
+  if (eventName === "status") {
+    // Update based on phase info
+    if (phase === "dispatching") {
+      setTechStep("workflows", "active", "Dispatching durable task...");
+    } else if (phase === "running") {
+      // Task is running - check techPhase for which component is active
+      if (techPhase === "youcom" || techPhase === "research") {
+        setTechStep("workflows", "done", "Task dispatched");
+        setTechStep("youcom", "active", "Searching the web...", data.query || "");
+      } else if (techPhase === "mastra" || techPhase === "synthesis") {
+        setTechStep("youcom", "done", "Research complete", `${data.sourceCount || "?"} sources found`);
+        setTechStep("mastra", "active", "AI synthesizing results...");
+      } else {
+        // Estimate phase based on elapsed time since we don't have detailed phase info
+        // Typical timing: 0-2s dispatch, 2-15s You.com, 15-30s Mastra
+        if (!techSteps.workflows.el.className.includes("done")) {
+          setTechStep("workflows", "done", "Task dispatched");
+        }
+
+        if (elapsed < 8) {
+          if (!techSteps.youcom.el.className.includes("active") && !techSteps.youcom.el.className.includes("done")) {
+            setTechStep("youcom", "active", "Researching with You.com...");
+          }
+        } else if (elapsed < 25) {
+          if (!techSteps.youcom.el.className.includes("done")) {
+            setTechStep("youcom", "done", "Research data gathered");
+          }
+          if (!techSteps.mastra.el.className.includes("active") && !techSteps.mastra.el.className.includes("done")) {
+            setTechStep("mastra", "active", "Mastra AI synthesizing...");
+          }
+        } else {
+          if (!techSteps.mastra.el.className.includes("done")) {
+            setTechStep("mastra", "done", "AI processing complete");
+          }
+          if (!techSteps.complete.el.className.includes("active")) {
+            setTechStep("complete", "active", "Finalizing results...");
+          }
+        }
+      }
+    }
+  } else if (eventName === "started") {
+    setTechStep("workflows", "done", "Task dispatched", `ID: ${(data.taskRunId || "").slice(0, 16)}...`);
+    setTechStep("youcom", "active", "Starting web research...");
+    if (data.dashboardUrl && pipelineDashboard) {
+      pipelineDashboard.href = data.dashboardUrl;
+    }
+  } else if (eventName === "done") {
+    // Mark all steps complete
+    setTechStep("workflows", "done", "Task orchestrated");
+    setTechStep("youcom", "done", "Web research complete");
+    setTechStep("mastra", "done", "AI synthesis complete");
+    setTechStep("complete", "done", "Pipeline finished!", `Total: ${elapsed}s`);
+
+    // Show result
+    const result = data.result || {};
+    let displayText = "";
+    if (result.briefing) {
+      displayText = result.briefing;
+    } else if (result.content) {
+      displayText = result.content;
+    } else if (result.summary) {
+      displayText = result.summary;
+    } else if (result.entryId) {
+      displayText = `✅ Knowledge stored successfully!\n\nEntry ID: ${result.entryId}\nConfidence: ${((result.confidence || 0) * 100).toFixed(0)}%`;
+    } else {
+      displayText = JSON.stringify(result, null, 2);
+    }
+    pipelineResultContent.textContent = displayText.slice(0, 2000);
+    pipelineResult.classList.add("visible");
+  } else if (eventName === "error") {
+    // Mark current active step as error
+    let foundActive = false;
+    for (const [name, step] of Object.entries(techSteps)) {
+      if (step.el.className.includes("active")) {
+        setTechStep(name, "error", `Error: ${data.message || "Unknown"}`);
+        foundActive = true;
+        break;
+      }
+    }
+    if (!foundActive) {
+      // Default to marking youcom as error
+      setTechStep("youcom", "error", `Error: ${data.message || "Unknown"}`);
+    }
+  }
+}
+
 /** Same rows for HTTP SSE (`runSsePipeline`) and voice WebSocket `pipeline` events. */
 function appendPipelineSseEvent(eventName, data) {
   if (!data || typeof data !== "object") data = {};
+
+  // Update the visual pipeline
+  updateTechPipelineFromEvent(eventName, data);
+
+  // Legacy feed (hidden but kept for compatibility)
   if (eventName === "status") {
     const w = data.workflowStatus ? ` ${data.workflowStatus}` : "";
     const strong = document.createElement("strong");
     strong.textContent = data.phase || "status";
     appendPipelineRow([strong, document.createTextNode(`${w} (${data.elapsed ?? 0}s)`)]);
   } else if (eventName === "started") {
-    if (data.dashboardUrl && pipelineDashboard) {
-      pipelineDashboard.href = data.dashboardUrl;
-    }
     appendPipelineRow([
       document.createTextNode("Task run "),
       (() => {
@@ -321,14 +489,7 @@ function appendPipelineSseEvent(eventName, data) {
       })(),
     ]);
   } else if (eventName === "done") {
-    const pre = document.createElement("pre");
-    pre.style.margin = "0.35rem 0 0";
-    pre.style.fontSize = "0.65rem";
-    pre.style.whiteSpace = "pre-wrap";
-    pre.style.wordBreak = "break-all";
-    const text = JSON.stringify(data.result ?? {}, null, 2);
-    pre.textContent = text.length > 4000 ? text.slice(0, 4000) + "\n..." : text;
-    appendPipelineRow([document.createTextNode("Done "), pre], "done");
+    appendPipelineRow([document.createTextNode("Done")], "done");
   } else if (eventName === "error") {
     const msg = typeof data === "string" ? data : data.message || JSON.stringify(data);
     pipelineError.textContent = msg;
@@ -345,23 +506,50 @@ async function runSsePipeline(url, bodyObj) {
   const signal = pipelineController.signal;
   setPipelineBusy(true);
   resetPipelineUi();
+
+  // Start with workflows step active
+  setTechStep("workflows", "active", "Dispatching task to Render Workflows...");
+
   const t0 = Date.now();
   const tick = setInterval(() => {
-    pipelineTimer.textContent = `${Math.floor((Date.now() - t0) / 1000)}s elapsed`;
-  }, 500);
+    const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
+    pipelineTimer.textContent = `${elapsed}s`;
+
+    // Update active step timers
+    for (const step of Object.values(techSteps)) {
+      if (step.el.className.includes("active") && step.startTime) {
+        step.time.textContent = `${((Date.now() - step.startTime) / 1000).toFixed(1)}s`;
+      }
+    }
+  }, 100);
+
   try {
     const res = await fetchSsePost(url, bodyObj, signal);
     await readSseStream(res, appendPipelineSseEvent);
   } catch (e) {
     if (e && e.name === "AbortError") {
-      appendPipelineRow([document.createTextNode("Cancelled (request aborted).")], "");
+      // Mark current step as cancelled
+      for (const [name, step] of Object.entries(techSteps)) {
+        if (step.el.className.includes("active")) {
+          setTechStep(name, "error", "Cancelled");
+          break;
+        }
+      }
       return;
     }
     pipelineError.textContent = e && e.message ? e.message : String(e);
     pipelineError.classList.add("visible");
+    // Mark current step as error
+    for (const [name, step] of Object.entries(techSteps)) {
+      if (step.el.className.includes("active")) {
+        setTechStep(name, "error", e && e.message ? e.message : "Error");
+        break;
+      }
+    }
   } finally {
     clearInterval(tick);
-    pipelineTimer.textContent = `${Math.floor((Date.now() - t0) / 1000)}s elapsed`;
+    const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
+    pipelineTimer.textContent = `${elapsed}s total`;
     setPipelineBusy(false);
     pipelineController = null;
   }
@@ -373,26 +561,36 @@ btnPipeCancel.addEventListener("click", () => {
 
 btnPipeIngest.addEventListener("click", () => {
   const topic = document.getElementById("pipe-topic").value.trim();
-  const claim = document.getElementById("pipe-claim").value.trim();
-  if (!topic || !claim) {
-    pipelineError.textContent = "Enter both topic and claim.";
+  let claim = document.getElementById("pipe-claim").value.trim();
+  if (!topic) {
+    pipelineError.textContent = "Enter a topic to research.";
     pipelineError.classList.add("visible");
     return;
+  }
+  // Use topic as claim if no claim provided
+  if (!claim) {
+    claim = `Tell me about ${topic}`;
   }
   runSsePipeline("/api/pipeline/ingest", { topic, claim });
 });
 
 btnPipeRecall.addEventListener("click", () => {
-  const query = document.getElementById("pipe-query").value.trim();
+  // Use topic input for recall query
+  const query = document.getElementById("pipe-topic").value.trim();
   if (!query) {
-    pipelineError.textContent = "Enter a recall query.";
+    pipelineError.textContent = "Enter a topic to recall.";
     pipelineError.classList.add("visible");
     return;
   }
+  // Update tech step labels for recall flow
+  techSteps.youcom.status.textContent = "Searching knowledge base...";
   runSsePipeline("/api/pipeline/recall", { query });
 });
 
 btnPipeReport.addEventListener("click", () => {
+  // Update tech step labels for report flow
+  techSteps.youcom.status.textContent = "Gathering all knowledge...";
+  techSteps.mastra.status.textContent = "Generating comprehensive report...";
   runSsePipeline("/api/pipeline/report", {});
 });
 

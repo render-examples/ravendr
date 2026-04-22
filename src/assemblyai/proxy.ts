@@ -1,15 +1,15 @@
 import { WebSocket as WS } from "ws";
 import { ASSEMBLYAI_WS_URL, SESSION_CONFIG } from "./config.js";
 import { Render } from "@renderinc/sdk";
-import { getRecentWorkflowRuns, trackWorkflowRun } from "../lib/db.js";
+import { getRecentWorkflowRuns, trackWorkflowRun } from "../render/postgres/db.js";
 import {
   DASHBOARD_TASKS_URL,
   runRecallPipeline,
   TOOLS_INGEST,
   TOOLS_REPORT,
   WORKFLOW_SLUG,
-} from "../pipeline/orchestrator.js";
-import { pollTaskRun } from "../pipeline/poll-task.js";
+} from "../render/workflows/orchestrator.js";
+import { pollTaskRun } from "../render/workflows/poll-task.js";
 import {
   matchTranscriptPipelineIntent,
   shouldSkipDuplicateDispatch,

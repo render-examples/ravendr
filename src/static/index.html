@@ -319,36 +319,169 @@
 
     .pipeline-card {
       margin: 1.25rem auto 0;
-      max-width: 560px;
-      padding: 1rem 1.25rem;
+      max-width: 640px;
+      padding: 1.25rem 1.5rem;
       background: var(--surface);
       border: 1px solid var(--border);
       border-radius: 8px;
       text-align: left;
     }
+    .pipeline-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 1rem;
+      padding-bottom: 0.75rem;
+      border-bottom: 1px solid var(--border);
+    }
     .pipeline-title {
-      font-size: 0.8rem;
+      font-size: 1rem;
       font-weight: 600;
       font-family: 'Inter', sans-serif;
       color: var(--text);
-      margin-bottom: 0.35rem;
+    }
+    .pipeline-timer {
+      font-size: 0.85rem;
+      font-variant-numeric: tabular-nums;
+      color: var(--render-purple);
+      font-weight: 600;
     }
     .pipeline-hint {
-      font-size: 0.7rem;
+      font-size: 0.75rem;
       color: var(--text-dim);
       line-height: 1.5;
+      margin-bottom: 1rem;
+    }
+
+    /* Tech Stack Visualization */
+    .tech-pipeline {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      margin-bottom: 1rem;
+      background: var(--bg);
+      border-radius: 6px;
+      padding: 0.5rem;
+    }
+    .tech-step {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.75rem;
+      padding: 0.6rem 0.5rem;
+      border-left: 3px solid var(--border);
+      margin-left: 0.5rem;
+      position: relative;
+    }
+    .tech-step:first-child { padding-top: 0.5rem; }
+    .tech-step:last-child { padding-bottom: 0.5rem; }
+    .tech-step.waiting { border-left-color: var(--text-dim); opacity: 0.5; }
+    .tech-step.active { border-left-color: var(--amber); }
+    .tech-step.active .tech-icon { background: rgba(245,158,11,0.15); border-color: var(--amber); }
+    .tech-step.done { border-left-color: var(--green); }
+    .tech-step.done .tech-icon { background: rgba(34,197,94,0.15); border-color: var(--green); }
+    .tech-step.error { border-left-color: var(--red); }
+    .tech-step.error .tech-icon { background: rgba(239,68,68,0.15); border-color: var(--red); }
+
+    .tech-icon {
+      width: 32px;
+      height: 32px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      font-size: 0.7rem;
+      font-weight: 700;
+      color: var(--text-muted);
+      position: relative;
+    }
+    .tech-step.active .tech-icon { animation: pulse 1.5s ease-in-out infinite; }
+    .tech-step.done .tech-icon { color: var(--green); }
+    .tech-step.error .tech-icon { color: var(--red); }
+
+    .tech-content { flex: 1; min-width: 0; }
+    .tech-name {
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 0.15rem;
+    }
+    .tech-status {
+      font-size: 0.7rem;
+      color: var(--text-muted);
+    }
+    .tech-detail {
+      font-size: 0.65rem;
+      color: var(--text-dim);
+      margin-top: 0.25rem;
+      font-family: "SF Mono", "Fira Code", monospace;
+    }
+    .tech-time {
+      font-size: 0.7rem;
+      color: var(--text-dim);
+      font-variant-numeric: tabular-nums;
+      text-align: right;
+      min-width: 50px;
+    }
+    .tech-step.done .tech-time { color: var(--green); }
+    .tech-step.active .tech-time { color: var(--amber); }
+
+    /* Input Section */
+    .pipeline-input {
+      background: var(--bg);
+      border-radius: 6px;
+      padding: 1rem;
+      margin-bottom: 1rem;
+    }
+    .pipeline-row {
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
       margin-bottom: 0.75rem;
     }
-    .pipeline-hint code { font-size: 0.65rem; background: rgba(255,255,255,0.06); padding: 0.1rem 0.25rem; border-radius: 3px; }
+    .pipeline-row:last-child { margin-bottom: 0; }
+    .pipeline-row label {
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--text-muted);
+      font-weight: 600;
+    }
+    .pipeline-row input {
+      padding: 0.5rem 0.75rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-size: 0.85rem;
+      font-family: 'Inter', sans-serif;
+      border-radius: 4px;
+    }
+    .pipeline-row input:focus { outline: none; border-color: var(--render-purple); }
+    .pipeline-actions {
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+      margin-top: 0.5rem;
+    }
+    .ctrl-btn.primary {
+      background: var(--render-purple);
+      border-color: var(--render-purple);
+      color: #fff;
+      padding: 0.5rem 1rem;
+      font-size: 0.8rem;
+    }
+    .ctrl-btn.primary:hover { background: var(--render-purple-hover); color: #fff; }
+
     .pipeline-meta {
       display: flex;
       align-items: center;
       justify-content: space-between;
       gap: 0.75rem;
       flex-wrap: wrap;
-      margin-bottom: 0.75rem;
-      padding-bottom: 0.75rem;
-      border-bottom: 1px solid var(--border);
+      padding-top: 0.75rem;
+      border-top: 1px solid var(--border);
     }
     .pipeline-meta-right {
       display: flex;
@@ -356,17 +489,8 @@
       gap: 0.5rem;
       flex-wrap: wrap;
     }
-    #btn-pipe-cancel {
-      display: none;
-    }
-    #btn-pipe-cancel.visible {
-      display: inline-flex;
-    }
-    .pipeline-timer {
-      font-size: 0.75rem;
-      font-variant-numeric: tabular-nums;
-      color: var(--text-muted);
-    }
+    #btn-pipe-cancel { display: none; }
+    #btn-pipe-cancel.visible { display: inline-flex; }
     .dashboard-link {
       display: inline-flex;
       align-items: center;
@@ -380,64 +504,45 @@
       text-decoration: none;
     }
     .dashboard-link:hover { background: rgba(108,99,255,0.12); text-decoration: none; }
-    .pipeline-row {
-      display: flex;
-      flex-direction: column;
-      gap: 0.4rem;
-      margin-bottom: 0.75rem;
+
+    .pipeline-result {
+      display: none;
+      margin-top: 1rem;
+      padding: 0.75rem;
+      background: rgba(34,197,94,0.08);
+      border: 1px solid rgba(34,197,94,0.25);
+      border-radius: 6px;
     }
-    .pipeline-row label {
-      font-size: 0.65rem;
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
-      color: var(--text-dim);
+    .pipeline-result.visible { display: block; }
+    .pipeline-result h4 {
+      font-size: 0.75rem;
       font-weight: 600;
+      color: var(--green);
+      margin-bottom: 0.5rem;
     }
-    .pipeline-row input {
-      padding: 0.45rem 0.6rem;
-      background: var(--bg);
-      border: 1px solid var(--border);
-      color: var(--text);
-      font-size: 0.8rem;
-      font-family: 'Inter', sans-serif;
-      border-radius: 4px;
-    }
-    .pipeline-row input:focus { outline: none; border-color: var(--render-purple); }
-    .pipeline-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
-    .ctrl-btn.primary {
-      background: var(--render-purple);
-      border-color: var(--render-purple);
-      color: #fff;
-    }
-    .ctrl-btn.primary:hover { background: var(--render-purple-hover); color: #fff; }
-    .pipeline-feed {
-      min-height: 2rem;
-      max-height: 220px;
-      overflow-y: auto;
-      font-size: 0.72rem;
+    .pipeline-result pre {
+      font-size: 0.7rem;
       color: var(--text-muted);
-      line-height: 1.45;
+      white-space: pre-wrap;
+      word-break: break-all;
+      max-height: 200px;
+      overflow-y: auto;
     }
-    .pipeline-feed .activity-row {
-      padding: 0.35rem 0;
-      border-left: 2px solid var(--border);
-      padding-left: 0.6rem;
-      margin-left: 2px;
-    }
-    .pipeline-feed .activity-row strong { color: var(--text); font-weight: 600; }
-    .pipeline-feed .activity-row.done { border-left-color: var(--green); }
-    .pipeline-feed .activity-row.err { border-left-color: var(--red); color: var(--red); }
+
     .pipeline-error {
       display: none;
-      margin-top: 0.5rem;
-      padding: 0.5rem 0.6rem;
+      margin-top: 0.75rem;
+      padding: 0.5rem 0.75rem;
       background: rgba(239,68,68,0.08);
       border: 1px solid rgba(239,68,68,0.25);
       color: #fca5a5;
       font-size: 0.75rem;
-      border-radius: 4px;
+      border-radius: 6px;
     }
     .pipeline-error.visible { display: block; }
+
+    /* Hidden legacy feed for compatibility */
+    .pipeline-feed { display: none; }
 
     @media (max-width: 600px) {
       header { flex-wrap: wrap; gap: 0.5rem; }
@@ -472,51 +577,108 @@
   </header>
 
   <div id="main">
-    <!-- Primary path (same idea as render-workflows-llamaindex: HTTP triggers tasks, SSE shows progress). -->
+    <!-- Demo Pipeline - Shows all 4 technologies working together -->
     <div class="pipeline-card" id="pipeline-card">
-      <h3 class="pipeline-title">Knowledge pipeline (start here)</h3>
+      <div class="pipeline-header">
+        <h3 class="pipeline-title">Research Pipeline Demo</h3>
+        <span class="pipeline-timer" id="pipeline-timer">Ready</span>
+      </div>
+
       <p class="pipeline-hint">
-        <strong>Main demo:</strong> run ingest, recall, or report below—your browser streams the same <code>status → started → done</code> phases as the document pipeline example. Optional voice sits under this; it only runs tasks when the agent calls a tool.
+        Enter a topic to research. Watch all four technologies work together: 
+        <strong>Render Workflows</strong> orchestrates durable tasks, 
+        <strong>You.com</strong> searches the web, 
+        <strong>Mastra</strong> synthesizes with AI, and 
+        <strong>AssemblyAI</strong> enables voice (optional).
       </p>
+
+      <!-- Tech Pipeline Visualization -->
+      <div class="tech-pipeline" id="tech-pipeline">
+        <div class="tech-step waiting" id="step-workflows" data-step="workflows">
+          <div class="tech-icon">RW</div>
+          <div class="tech-content">
+            <div class="tech-name">Render Workflows</div>
+            <div class="tech-status" id="status-workflows">Waiting to dispatch task...</div>
+            <div class="tech-detail" id="detail-workflows"></div>
+          </div>
+          <div class="tech-time" id="time-workflows">—</div>
+        </div>
+
+        <div class="tech-step waiting" id="step-youcom" data-step="youcom">
+          <div class="tech-icon">Y</div>
+          <div class="tech-content">
+            <div class="tech-name">You.com Research</div>
+            <div class="tech-status" id="status-youcom">Waiting for task...</div>
+            <div class="tech-detail" id="detail-youcom"></div>
+          </div>
+          <div class="tech-time" id="time-youcom">—</div>
+        </div>
+
+        <div class="tech-step waiting" id="step-mastra" data-step="mastra">
+          <div class="tech-icon">M</div>
+          <div class="tech-content">
+            <div class="tech-name">Mastra AI Agent</div>
+            <div class="tech-status" id="status-mastra">Waiting for research...</div>
+            <div class="tech-detail" id="detail-mastra"></div>
+          </div>
+          <div class="tech-time" id="time-mastra">—</div>
+        </div>
+
+        <div class="tech-step waiting" id="step-complete" data-step="complete">
+          <div class="tech-icon">✓</div>
+          <div class="tech-content">
+            <div class="tech-name">Complete</div>
+            <div class="tech-status" id="status-complete">Waiting for synthesis...</div>
+            <div class="tech-detail" id="detail-complete"></div>
+          </div>
+          <div class="tech-time" id="time-complete">—</div>
+        </div>
+      </div>
+
+      <!-- Input Section -->
+      <div class="pipeline-input">
+        <div class="pipeline-row">
+          <label>Research Topic</label>
+          <input type="text" id="pipe-topic" placeholder="e.g. Render cloud platform, quantum computing, SpaceX" autocomplete="off" />
+        </div>
+        <div class="pipeline-row">
+          <label>Claim to verify (optional)</label>
+          <input type="text" id="pipe-claim" placeholder="e.g. Render makes deployment easy" autocomplete="off" />
+        </div>
+        <div class="pipeline-actions">
+          <button type="button" class="ctrl-btn primary" id="btn-pipe-ingest">🔍 Research This</button>
+          <button type="button" class="ctrl-btn" id="btn-pipe-recall">📚 Recall Knowledge</button>
+          <button type="button" class="ctrl-btn" id="btn-pipe-report">📊 Full Report</button>
+        </div>
+      </div>
+
+      <!-- Result Display -->
+      <div class="pipeline-result" id="pipeline-result">
+        <h4>Research Complete</h4>
+        <pre id="pipeline-result-content"></pre>
+      </div>
+
+      <div class="pipeline-error" id="pipeline-error"></div>
+
+      <!-- Footer with dashboard link -->
       <div class="pipeline-meta">
-        <span class="pipeline-timer" id="pipeline-timer">0s elapsed</span>
+        <button type="button" class="ctrl-btn danger" id="btn-pipe-cancel" title="Stop">Cancel</button>
         <div class="pipeline-meta-right">
-          <button type="button" class="ctrl-btn danger" id="btn-pipe-cancel" title="Stop streaming">Cancel</button>
           <a class="dashboard-link" href="https://dashboard.render.com" target="_blank" rel="noopener" id="pipeline-dashboard">
             <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
-            Watch tasks in the Render Dashboard
+            View in Render Dashboard
           </a>
         </div>
       </div>
-      <div class="pipeline-row">
-        <label>Learn (ingest)</label>
-        <input type="text" id="pipe-topic" placeholder="Topic (e.g. quantum computing)" autocomplete="off" />
-        <input type="text" id="pipe-claim" placeholder="Claim to verify" autocomplete="off" />
-        <div class="pipeline-actions">
-          <button type="button" class="ctrl-btn primary" id="btn-pipe-ingest">Run ingest</button>
-        </div>
-      </div>
-      <div class="pipeline-row">
-        <label>Recall</label>
-        <input type="text" id="pipe-query" placeholder="What do I know about..." autocomplete="off" />
-        <div class="pipeline-actions">
-          <button type="button" class="ctrl-btn primary" id="btn-pipe-recall">Run recall</button>
-        </div>
-      </div>
-      <div class="pipeline-row">
-        <label>Report</label>
-        <div class="pipeline-actions">
-          <button type="button" class="ctrl-btn primary" id="btn-pipe-report">Generate full report</button>
-        </div>
-      </div>
-      <div class="pipeline-error" id="pipeline-error"></div>
+
+      <!-- Hidden legacy feed for compatibility -->
       <div class="pipeline-feed" id="pipeline-feed"></div>
     </div>
 
     <div class="welcome" id="welcome">
-      <h2>Optional: voice</h2>
+      <h2>Voice Interface (Optional)</h2>
       <p>
-        Same <a href="https://render.com/workflows" target="_blank" rel="noopener">Render Workflow</a> tasks as the buttons—via AssemblyAI when the model invokes learn / recall / report tools.
+        Use <strong>AssemblyAI</strong> voice to trigger the same pipeline. Say things like "Learn about Render" or "What do you know about cloud computing?"
       </p>
       <div class="mic-area">
         <button class="mic-btn" id="mic-btn" title="Start conversation">
@@ -552,13 +714,16 @@
   </div>
 
   <footer>
-    <span>Built with Mastra + You.com + AssemblyAI</span>
+    <span>
+      <a href="https://render.com/workflows" target="_blank" rel="noopener">Render Workflows</a> +
+      <a href="https://you.com/api" target="_blank" rel="noopener">You.com</a> +
+      <a href="https://mastra.ai" target="_blank" rel="noopener">Mastra</a> +
+      <a href="https://www.assemblyai.com" target="_blank" rel="noopener">AssemblyAI</a>
+    </span>
     <span class="sep">&middot;</span>
-    <a href="https://render.com/" target="_blank" rel="noopener">Powered by Render</a>
+    <a id="footer-github" href="" target="_blank" rel="noopener">GitHub</a>
     <span class="sep">&middot;</span>
-    <a id="footer-github" href="" target="_blank" rel="noopener">Source</a>
-    <span class="sep">&middot;</span>
-    <a id="footer-signup" href="" target="_blank" rel="noopener">Sign up on Render</a>
+    <a id="footer-signup" href="" target="_blank" rel="noopener">Try Render Free</a>
   </footer>
 
   <script type="module" src="/app.js"></script>

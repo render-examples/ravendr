@@ -1,20 +1,20 @@
 import { task } from "@renderinc/sdk/workflows";
-import { quickSearch, deepResearch } from "../lib/you-client.js";
+import { quickSearch, deepResearch } from "../../youcom/you-client.js";
 import {
   mastraFactCheckFromEvidence,
   mastraSynthesizeKnowledgeEntry,
   runResearchPhaseWithMastraTools,
-} from "../lib/mastra-workflow.js";
+} from "../../mastra/mastra-workflow.js";
 import {
   ensureMastraMemory,
   buildMastraRequestContext,
   threadKeyIngest,
-} from "../lib/mastra-memory.js";
+} from "../../mastra/mastra-memory.js";
 import {
   storeKnowledgeEntry,
   searchKnowledge,
   updateConnections,
-} from "../lib/db.js";
+} from "../postgres/db.js";
 
 /**
  * Quick fact-check using You.com lite search (~5s).

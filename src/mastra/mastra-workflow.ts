@@ -4,14 +4,14 @@
 
 import { z } from "zod";
 import type { RequestContext } from "@mastra/core/request-context";
-import { getFactCheckerAgent } from "../agents/fact-checker.js";
-import { getConnectorAgent } from "../agents/connector.js";
-import { getSynthesizerAgent } from "../agents/synthesizer.js";
+import { getFactCheckerAgent } from "./fact-checker.js";
+import { getConnectorAgent } from "./connector.js";
+import { getSynthesizerAgent } from "./synthesizer.js";
 import {
   buildMastraRequestContext,
   threadKeyRecall,
 } from "./mastra-memory.js";
-import type { KnowledgeEntry } from "./db.js";
+import type { KnowledgeEntry } from "../render/postgres/db.js";
 
 export {
   runResearchPhaseWithMastraTools,

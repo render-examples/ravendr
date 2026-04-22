@@ -4,10 +4,8 @@
  */
 
 import { Render } from "@renderinc/sdk";
-import {
-  trackWorkflowRun,
-} from "../lib/db.js";
-import { getRenderDashboardTasksUrl } from "../lib/render-dashboard-url.js";
+import { trackWorkflowRun } from "../postgres/db.js";
+import { getRenderDashboardTasksUrl } from "./render-dashboard-url.js";
 import { pollTaskRun } from "./poll-task.js";
 
 export const WORKFLOW_SLUG = process.env.WORKFLOW_SLUG ?? "ravendr-workflows";

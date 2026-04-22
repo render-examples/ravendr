@@ -1,6 +1,6 @@
 import { Agent } from "@mastra/core/agent";
 import type { Memory } from "@mastra/memory";
-import { getRavendrMemory } from "../lib/mastra-memory.js";
+import { getRavendrMemory } from "./mastra-memory.js";
 
 let cached: Agent | null = null;
 let cachedMem: Memory | undefined = undefined;

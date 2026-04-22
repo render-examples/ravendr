@@ -2,8 +2,8 @@ import { Agent } from "@mastra/core/agent";
 import { createTool } from "@mastra/core/tools";
 import type { Memory } from "@mastra/memory";
 import { z } from "zod";
-import { quickSearch, deepResearch } from "../lib/you-client.js";
-import { getRavendrMemory } from "../lib/mastra-memory.js";
+import { quickSearch, deepResearch } from "../youcom/you-client.js";
+import { getRavendrMemory } from "./mastra-memory.js";
 
 const sourceSchema = z.object({
   url: z.string(),

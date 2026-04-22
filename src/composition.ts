@@ -1,6 +1,6 @@
-import { createPgKnowledgeRepository } from "./adapters/pg-knowledge-repository.js";
-import { createPgWorkflowRunRepository } from "./adapters/pg-workflow-run-repository.js";
-import { createRenderTaskRunReader } from "./adapters/render-task-run-reader.js";
+import { createPgKnowledgeRepository } from "./render/postgres/pg-knowledge-repository.js";
+import { createPgWorkflowRunRepository } from "./render/postgres/pg-workflow-run-repository.js";
+import { createRenderTaskRunReader } from "./render/workflows/render-task-run-reader.js";
 import type { KnowledgeRepository } from "./ports/knowledge-repository.js";
 import type { WorkflowRunRepository } from "./ports/workflow-run-repository.js";
 import type { TaskRunReader } from "./ports/task-run-reader.js";

@@ -10,7 +10,7 @@
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
     "start": "node dist/server.js",
-    "tasks": "tsx src/tasks/index.ts",
+    "tasks": "tsx src/render/workflows/index.ts",
     "workflows": "npm run tasks"
   },
   "dependencies": {

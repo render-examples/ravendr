@@ -6,7 +6,7 @@ import type { Render } from "@renderinc/sdk";
 import {
   completeWorkflowRun,
   failWorkflowRun,
-} from "../lib/db.js";
+} from "../postgres/db.js";
 
 export type StartedTask = Awaited<
   ReturnType<Render["workflows"]["startTask"]>

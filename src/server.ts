@@ -4,14 +4,14 @@ import { getRequestListener } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { createServer } from "http";
 import { WebSocketServer, WebSocket } from "ws";
-import { initDb } from "./lib/db.js";
-import { createVoiceProxy } from "./voice/proxy.js";
+import { initDb } from "./render/postgres/db.js";
+import { createVoiceProxy } from "./assemblyai/proxy.js";
 import {
   runIngestPipeline,
   runRecallPipeline,
   runReportPipeline,
-} from "./pipeline/orchestrator.js";
-import { getRenderDashboardTasksUrl } from "./lib/render-dashboard-url.js";
+} from "./render/workflows/orchestrator.js";
+import { getRenderDashboardTasksUrl } from "./render/workflows/render-dashboard-url.js";
 import { createAppDeps } from "./composition.js";
 import { ok, fail } from "./shared/api-envelope.js";
 

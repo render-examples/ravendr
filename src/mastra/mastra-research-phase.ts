@@ -3,8 +3,8 @@
  * Separated from other Mastra helpers to keep modules under ~200 lines.
  */
 
-import { getIngestResearchAgent } from "../agents/ingest-research.js";
-import { quickSearch, deepResearch } from "./you-client.js";
+import { getIngestResearchAgent } from "./ingest-research.js";
+import { quickSearch, deepResearch } from "../youcom/you-client.js";
 import {
   buildMastraRequestContext,
   threadKeyIngest,

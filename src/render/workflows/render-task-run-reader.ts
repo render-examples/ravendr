@@ -1,5 +1,5 @@
 import { Render } from "@renderinc/sdk";
-import type { TaskRunReader, WorkflowTaskRunDetails } from "../ports/task-run-reader.js";
+import type { TaskRunReader, WorkflowTaskRunDetails } from "../../ports/task-run-reader.js";
 
 export function createRenderTaskRunReader(): TaskRunReader {
   const render = new Render();
