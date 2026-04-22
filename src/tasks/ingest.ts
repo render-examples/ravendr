@@ -201,10 +201,13 @@ export const ingest = task(
     topic: string,
     claim: string
   ): Promise<{ entryId: string; confidence: number }> {
+    console.log(`[ingest] Starting ingest for topic="${topic}", claim="${claim.slice(0, 50)}..."`);
     await ensureMastraMemory();
     const threadId = threadKeyIngest(topic, claim);
 
+    console.log(`[ingest] Running research phase...`);
     const bundle = await runResearchPhaseWithMastraTools(topic, claim);
+    console.log(`[ingest] Research complete: quick=${bundle.quickContent.length} chars, deep=${bundle.deepSummary.length} chars`);
     const rc = buildMastraRequestContext(threadId);
 
     const fc = await mastraFactCheckFromEvidence(

@@ -54,6 +54,7 @@ export async function runResearchPhaseWithMastraTools(
   topic: string,
   claim: string
 ): Promise<ResearchBundle> {
+  console.log(`[research-phase] Starting Mastra tool-calling agent for topic="${topic}"`);
   const rc = buildMastraRequestContext(threadKeyIngest(topic, claim));
   const agent = getIngestResearchAgent();
 
@@ -68,6 +69,7 @@ Call quick_search first for fact-check evidence, then deep_research for a full o
     }
   );
 
+  console.log(`[research-phase] Agent completed, extracting tool results...`);
   const extracted = extractResearchFromSteps(out);
   if (
     extracted.quickContent &&
@@ -75,6 +77,7 @@ Call quick_search first for fact-check evidence, then deep_research for a full o
     extracted.quickSources &&
     extracted.deepSources
   ) {
+    console.log(`[research-phase] Extracted from Mastra steps: quick=${extracted.quickContent.length} chars, deep=${extracted.deepSummary.length} chars`);
     return {
       quickContent: extracted.quickContent,
       deepSummary: extracted.deepSummary,
@@ -83,6 +86,7 @@ Call quick_search first for fact-check evidence, then deep_research for a full o
     };
   }
 
+  console.log(`[research-phase] Mastra tool extraction incomplete, falling back to direct You.com calls`);
   const [quick, deep] = await Promise.all([
     quickSearch(`Fact check: ${claim} regarding ${topic}`),
     deepResearch(

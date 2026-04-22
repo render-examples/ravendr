@@ -178,4 +178,8 @@ If this folder lives inside a monorepo (e.g. **Samples**), use the repository ro
 
 **"recall" returns empty**: ingest runs in the background. If you recall a topic right after mentioning it, the research may still be running.
 
+**You.com research not triggering**: verify `YOU_API_KEY` is set on the **Workflow service** (not the web service). Check workflow logs for `[you-client] YOU_API_KEY is not set` warnings. The Mastra agent calls You.com via tools; if the key is missing, research silently returns empty results.
+
+**Ingest completes but no knowledge stored**: check `ANTHROPIC_API_KEY` is set on the Workflow service. The Mastra agents (fact-checker, connector, synthesizer) require Claude access. Also verify `DATABASE_URL` points to the Internal URL of the PostgreSQL database.
+
 **Database errors**: web service gets `DATABASE_URL` from Blueprint. Workflow service needs it copied manually from the database settings (Internal URL).
