@@ -126,6 +126,36 @@ let mediaStream = null;
 let processor = null;
 let connected = false;
 const workflows = [];
+let voicePipelineTimer = null;
+let voicePipelineStart = null;
+
+function startVoicePipelineTimer() {
+  stopVoicePipelineTimer();
+  voicePipelineStart = Date.now();
+  pipelineTimer.textContent = "0.0s";
+  voicePipelineTimer = setInterval(() => {
+    const elapsed = ((Date.now() - voicePipelineStart) / 1000).toFixed(1);
+    pipelineTimer.textContent = `${elapsed}s`;
+    // Update active step timers
+    for (const step of Object.values(techSteps)) {
+      if (step.el.className.includes("active") && step.startTime) {
+        step.time.textContent = `${((Date.now() - step.startTime) / 1000).toFixed(1)}s`;
+      }
+    }
+  }, 100);
+}
+
+function stopVoicePipelineTimer() {
+  if (voicePipelineTimer) {
+    clearInterval(voicePipelineTimer);
+    voicePipelineTimer = null;
+  }
+  if (voicePipelineStart) {
+    const elapsed = ((Date.now() - voicePipelineStart) / 1000).toFixed(1);
+    pipelineTimer.textContent = `${elapsed}s total`;
+    voicePipelineStart = null;
+  }
+}
 
 function addMessage(text, type = "agent") {
   const div = document.createElement("div");
@@ -209,9 +239,21 @@ function handleEvent(event) {
   } else if (t === "transcript.user") {
     addMessage(event.text, "user");
   } else if (t === "pipeline") {
+    // Show pipeline visualization for voice-triggered workflows
+    if (event.sseEvent === "status" && event.data?.phase === "dispatching") {
+      // New voice workflow starting - reset and start timer
+      resetTechPipeline();
+      startVoicePipelineTimer();
+      setTechStep("workflows", "active", "Dispatching task...");
+      // Scroll pipeline into view
+      document.getElementById("pipeline-card")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
     appendPipelineSseEvent(event.sseEvent || "message", event.data || {});
     if (event.data?.taskRunId && event.sseEvent === "started") {
       addWorkflow(event.data.taskRunId, "workflow", "running");
+    }
+    if (event.sseEvent === "done" || event.sseEvent === "error") {
+      stopVoicePipelineTimer();
     }
   } else if (t === "transcript.agent") {
     addMessage(event.text, "agent");
