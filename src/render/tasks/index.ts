@@ -14,3 +14,4 @@ export { research } from "./research.js";
 export { plan_queries } from "./plan-queries.js";
 export { search_branch } from "./search-branch.js";
 export { synthesize } from "./synthesize.js";
+export { verify } from "./verify.js";

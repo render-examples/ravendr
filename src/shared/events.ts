@@ -34,6 +34,26 @@ export const PhaseEventSchema = z.discriminatedUnion("kind", [
   }),
   z.object({ ...base, kind: z.literal("agent.synthesizing") }),
 
+  // ── verify (self-evaluation of briefing vs. user ask) ────────────
+  z.object({ ...base, kind: z.literal("verify.started") }),
+  z.object({
+    ...base,
+    kind: z.literal("verify.passed"),
+    reason: z.string(),
+  }),
+  z.object({
+    ...base,
+    kind: z.literal("verify.failed"),
+    reason: z.string(),
+    feedback: z.string(),
+  }),
+  z.object({
+    ...base,
+    kind: z.literal("research.retrying"),
+    attempt: z.number(),
+    feedback: z.string(),
+  }),
+
   // ── You.com ───────────────────────────────────────────────────────
   z.object({ ...base, kind: z.literal("youcom.call.started"), query: z.string(), tier: Tier }),
   z.object({
@@ -66,8 +86,8 @@ export function parsePhaseEvent(raw: unknown): PhaseEvent | null {
 /** Which vendor "lane" an event belongs to, for the frontend chain ribbon. */
 export function laneOf(kind: PhaseEventKind): "assembly" | "render" | "mastra" | "youcom" | "meta" {
   if (kind === "session.started") return "assembly";
-  if (kind.startsWith("workflow.") || kind === "briefing.ready") return "render";
-  if (kind.startsWith("agent.") || kind === "plan.ready") return "mastra";
+  if (kind.startsWith("workflow.") || kind === "briefing.ready" || kind === "research.retrying") return "render";
+  if (kind.startsWith("agent.") || kind === "plan.ready" || kind.startsWith("verify.")) return "mastra";
   if (kind.startsWith("youcom.")) return "youcom";
   return "meta";
 }

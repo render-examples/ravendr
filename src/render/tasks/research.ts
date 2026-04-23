@@ -6,6 +6,7 @@ import { logger } from "../../shared/logger.js";
 import { plan_queries } from "./plan-queries.js";
 import { search_branch, type BranchResult } from "./search-branch.js";
 import { synthesize } from "./synthesize.js";
+import { verify } from "./verify.js";
 
 export interface ResearchResult {
   briefingId: string;
@@ -14,21 +15,21 @@ export interface ResearchResult {
 }
 
 /**
- * Render Workflow subtask: orchestrates the research pipeline.
+ * Orchestrates the research pipeline. Every `await` below dispatches a
+ * new Render task run — failures checkpoint at that boundary.
  *
- * Each `await` below dispatches a NEW Render task run. That's the checkpoint
- * boundary — failures in a child retry independently without restarting
- * this parent.
- *
- *   plan_queries (1 run)
- *   search_branch (N parallel runs)
- *   synthesize    (1 run)
+ *   plan_queries    (Mastra — pick angles)
+ *   search_branch   (You.com — parallel × N)
+ *   synthesize      (Mastra — write briefing)
+ *   verify          (Mastra — does the briefing address the ask?)
+ *   on verify.fail: one retry with the verifier's feedback baked into
+ *   the next plan_queries call.
  */
 export const research = task(
   {
     name: "research",
     plan: "starter",
-    timeoutSeconds: 600,
+    timeoutSeconds: 900, // wider since verify + retry can take longer
     retry: { maxRetries: 0, waitDurationMs: 1_000, backoffScaling: 1.5 },
   },
   async function research(
@@ -58,18 +59,37 @@ export const research = task(
         runId,
       });
 
-      // ── subtask 1: plan ─────────────────────────────────────────────
-      const plan = await plan_queries(sessionId, topic);
+      let feedback = "";
+      let attempt = 0;
+      let result: Awaited<ReturnType<typeof synthesize>>;
 
-      // ── subtask 2: search (parallel) ────────────────────────────────
-      const branches: BranchResult[] = await Promise.all(
-        plan.queries.map((q) =>
-          search_branch(sessionId, q.angle, q.query, q.tier)
-        )
-      );
+      // Run the pipeline once; if verify fails, run it one more time with
+      // the verifier's feedback feeding into the planner.
+      while (true) {
+        const plan = await plan_queries(sessionId, topic, feedback || undefined);
 
-      // ── subtask 3: synthesize ───────────────────────────────────────
-      const result = await synthesize(sessionId, briefingId, topic, branches);
+        const branches: BranchResult[] = await Promise.all(
+          plan.queries.map((q) =>
+            search_branch(sessionId, q.angle, q.query, q.tier)
+          )
+        );
+
+        result = await synthesize(sessionId, briefingId, topic, branches);
+
+        const verdict = await verify(sessionId, topic, result.content);
+
+        if (verdict.passes || attempt >= 1) break;
+
+        attempt += 1;
+        feedback = verdict.feedback || verdict.reason || "";
+        await events.publish({
+          sessionId,
+          at: Date.now(),
+          kind: "research.retrying",
+          attempt,
+          feedback: feedback.slice(0, 500),
+        });
+      }
 
       await events.publish({
         sessionId,

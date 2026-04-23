@@ -49,7 +49,8 @@ export const plan_queries = task(
   },
   async function plan_queries(
     sessionId: string,
-    topic: string
+    topic: string,
+    feedback?: string
   ): Promise<PlanResult> {
     const config = loadWorkflowConfig();
     const events = createPostgresEventBus({
@@ -72,7 +73,11 @@ export const plan_queries = task(
         model: normalizeModelId(config.ANTHROPIC_MODEL),
       });
 
-      const result = await agent.generate(`Topic: "${topic}"\n\nPlan the queries now. Respond with JSON only.`);
+      const userPrompt = feedback
+        ? `Topic: "${topic}"\n\nThe previous attempt failed verification. Verifier feedback:\n${feedback}\n\nAdjust your plan — the queries should target what was missed. Respond with JSON only.`
+        : `Topic: "${topic}"\n\nPlan the queries now. Respond with JSON only.`;
+
+      const result = await agent.generate(userPrompt);
       const text = (result as { text?: string }).text ?? "";
       const plan = parsePlan(text, topic);
 

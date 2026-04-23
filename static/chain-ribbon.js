@@ -6,10 +6,14 @@ const LANE_BY_KIND = {
   "workflow.started": "render",
   "workflow.completed": "render",
   "workflow.failed": "render",
+  "research.retrying": "render",
   "briefing.ready": "render",
   "agent.planning": "mastra",
   "plan.ready": "mastra",
   "agent.synthesizing": "mastra",
+  "verify.started": "mastra",
+  "verify.passed": "mastra",
+  "verify.failed": "mastra",
   "youcom.call.started": "youcom",
   "youcom.call.completed": "youcom",
 };
@@ -74,6 +78,18 @@ export function createRibbon(rootEl) {
           break;
         case "agent.synthesizing":
           setSub("mastra", "synthesizing");
+          break;
+        case "verify.started":
+          setSub("mastra", "verifying briefing");
+          break;
+        case "verify.passed":
+          setSub("mastra", "verified · ok");
+          break;
+        case "verify.failed":
+          setSub("mastra", "verified · re-plan");
+          break;
+        case "research.retrying":
+          setSub("render", `retrying · attempt ${event.attempt}`);
           break;
         case "youcom.call.started":
           setSub("youcom", `${event.tier} · calling`);

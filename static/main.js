@@ -52,12 +52,16 @@ const KIND_CLASS = {
   "plan.ready": "kind-mastra",
   "agent.planning": "kind-mastra",
   "agent.synthesizing": "kind-mastra",
+  "verify.started": "kind-mastra",
+  "verify.passed": "kind-mastra",
+  "verify.failed": "kind-mastra",
   "youcom.call.started": "kind-youcom",
   "youcom.call.completed": "kind-youcom",
   "workflow.dispatched": "kind-render",
   "workflow.started": "kind-render",
   "workflow.completed": "kind-render",
   "workflow.failed": "kind-render",
+  "research.retrying": "kind-render",
   "briefing.ready": "kind-briefing",
 };
 
@@ -157,6 +161,10 @@ function summarize(e) {
     case "agent.planning": return `agent.planning — ${e.step}`;
     case "plan.ready": return `plan.ready — ${e.queries.length} queries: ${e.queries.map((q) => q.angle).join(", ")}`;
     case "agent.synthesizing": return "agent.synthesizing";
+    case "verify.started": return "verify.started — checking briefing vs. ask";
+    case "verify.passed": return `verify.passed — ${e.reason}`;
+    case "verify.failed": return `verify.failed — ${e.reason}`;
+    case "research.retrying": return `research.retrying (attempt ${e.attempt}) — ${e.feedback.slice(0, 80)}`;
     case "youcom.call.started": return `youcom.call.started — ${e.tier}`;
     case "youcom.call.completed": return `youcom.call.completed — ${e.sourceCount} sources — ${e.latencyMs}ms`;
     case "briefing.ready": return `briefing.ready — ${e.sourceCount} sources`;
