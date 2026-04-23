@@ -1,9 +1,9 @@
 // Orchestrator: connects the mic button to the WebSocket + SSE + ribbon + chat.
 
 import {
-  createSession,
+  startSession,
   openEventStream,
-  openVoiceSocket,
+  openClientSocket,
   fetchBriefing,
 } from "/api-client.js";
 import { startCapture, createPlayer } from "/mic.js";
@@ -169,9 +169,9 @@ async function start() {
   briefingEl.classList.remove("show");
   pendingUserBubble = null;
 
-  const sessionId = await createSession();
+  const sessionId = await startSession();
   closeEvents = openEventStream(sessionId, handleEvent);
-  ws = openVoiceSocket(sessionId, {
+  ws = openClientSocket(sessionId, {
     onReady: () => setStatus("Listening — say a topic."),
     onAudio: (b64) => player.enqueue(b64),
     onTranscript: handleTranscript,

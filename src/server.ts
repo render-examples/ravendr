@@ -3,41 +3,38 @@ import { WebSocketServer } from "ws";
 import { loadConfig } from "./config.js";
 import { logger } from "./shared/logger.js";
 import { buildRoutes } from "./routes.js";
-import { createYouComResearch } from "./youcom/research.js";
-import { createAssemblyAIRuntime } from "./assemblyai/runtime.js";
-import { wireVoiceSession } from "./assemblyai/ws-proxy.js";
 import { createPostgresEventBus } from "./render/event-bus.js";
 import { createWorkflowDispatcher } from "./render/workflow-dispatcher.js";
+import { createSessionBroker } from "./render/session-broker.js";
 
 /**
- * Composition root. Wires ports to adapters, starts Hono + WebSocket upgrade,
- * boots the Postgres LISTEN loop.
+ * Composition root for the web service.
+ *
+ * Its entire job now:
+ *   1. Serve static frontend + a handful of HTTP endpoints.
+ *   2. Broker WebSockets: pair the browser's audio WS (/ws/client) with
+ *      the workflow task's reverse WS (/ws/task) for the same sessionId.
+ *      Forward bytes both directions. No AssemblyAI code here.
+ *   3. Subscribe to Postgres phase_events and fan them out via SSE.
  */
 async function main(): Promise<void> {
   const config = loadConfig();
 
-  const research = createYouComResearch({
-    apiKey: config.YOU_API_KEY,
-    baseUrl: config.YOU_BASE_URL,
+  const events = createPostgresEventBus({
+    connectionString: config.DATABASE_URL,
   });
-  const voice = createAssemblyAIRuntime({
-    apiKey: config.ASSEMBLYAI_API_KEY,
-    agentUrl: config.ASSEMBLYAI_AGENT_URL,
-    voice: config.ASSEMBLYAI_VOICE,
-  });
-  const events = createPostgresEventBus({ connectionString: config.DATABASE_URL });
   await events.start();
   const dispatcher = createWorkflowDispatcher({
     apiKey: config.RENDER_API_KEY,
     workflowSlug: config.WORKFLOW_SLUG,
   });
+  const broker = createSessionBroker();
 
   const app = buildRoutes({
     databaseUrl: config.DATABASE_URL,
     events,
-    voice,
-    research,
     dispatcher,
+    broker,
   });
 
   const server = serve(
@@ -45,10 +42,10 @@ async function main(): Promise<void> {
     (info) => logger.info({ port: info.port }, "ravendr-web listening")
   );
 
-  // ── WebSocket upgrade for /ws ─────────────────────────────────────
+  // ── WebSocket upgrade: /ws/client (browser) + /ws/task (task) ────────
   const wss = new WebSocketServer({ noServer: true });
   server.on("upgrade", (req, socket, head) => {
-    if (!req.url?.startsWith("/ws")) {
+    if (!req.url) {
       socket.destroy();
       return;
     }
@@ -58,19 +55,26 @@ async function main(): Promise<void> {
       socket.destroy();
       return;
     }
-    wss.handleUpgrade(req, socket, head, (ws) => {
-      wireVoiceSession({
-        browser: ws,
-        sessionId,
-        voice,
-        events,
-        dispatcher,
-        databaseUrl: config.DATABASE_URL,
-      }).catch((err) => logger.error({ err }, "wireVoiceSession failed"));
-    });
+
+    if (url.pathname === "/ws/client") {
+      wss.handleUpgrade(req, socket, head, (ws) => {
+        broker.registerClient(sessionId, ws);
+      });
+      return;
+    }
+
+    if (url.pathname === "/ws/task") {
+      const token = url.searchParams.get("token") ?? "";
+      wss.handleUpgrade(req, socket, head, (ws) => {
+        const ok = broker.registerTask(sessionId, token, ws);
+        if (!ok) ws.close();
+      });
+      return;
+    }
+
+    socket.destroy();
   });
 
-  // ── graceful shutdown ─────────────────────────────────────────────
   const shutdown = async () => {
     logger.info("shutting down");
     await events.stop();

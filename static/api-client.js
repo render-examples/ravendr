@@ -1,21 +1,10 @@
 // Single API client for the frontend. All HTTP / WS URLs go through here.
 
-export async function createSession() {
-  const res = await fetch("/api/sessions", { method: "POST" });
+export async function startSession() {
+  const res = await fetch("/api/start", { method: "POST" });
   const body = await res.json();
   if (body.error) throw new Error(body.error.message);
   return body.data.sessionId;
-}
-
-export async function dispatchResearch(sessionId, topic) {
-  const res = await fetch(`/api/sessions/${sessionId}/dispatch`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ topic }),
-  });
-  const body = await res.json();
-  if (body.error) throw new Error(body.error.message);
-  return body.data;
 }
 
 export async function fetchBriefing(briefingId) {
@@ -35,9 +24,15 @@ export function openEventStream(sessionId, onEvent) {
   return () => es.close();
 }
 
-export function openVoiceSocket(sessionId, handlers) {
+/**
+ * Browser audio WebSocket — connects to the web service broker which
+ * pipes to the voiceSession workflow task over the reverse WS.
+ */
+export function openClientSocket(sessionId, handlers) {
   const scheme = location.protocol === "https:" ? "wss:" : "ws:";
-  const ws = new WebSocket(`${scheme}//${location.host}/ws?sessionId=${encodeURIComponent(sessionId)}`);
+  const ws = new WebSocket(
+    `${scheme}//${location.host}/ws/client?sessionId=${encodeURIComponent(sessionId)}`
+  );
   ws.addEventListener("message", (e) => {
     if (typeof e.data !== "string") return;
     let msg;

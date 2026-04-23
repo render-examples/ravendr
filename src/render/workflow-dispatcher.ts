@@ -7,19 +7,14 @@ export interface WorkflowDispatcherConfig {
   workflowSlug: string;
 }
 
-export interface ResearchDispatchArgs {
-  sessionId: string;
-  topic: string;
-}
-
 export interface WorkflowDispatcher {
-  dispatchResearch(args: ResearchDispatchArgs): Promise<string>;
+  /**
+   * Starts the voiceSession task run. The task opens AssemblyAI and its
+   * reverse WS back to this web service. Returns the Render taskRunId.
+   */
+  startVoiceSession(sessionId: string, taskToken: string): Promise<string>;
 }
 
-/**
- * Dispatches Render Workflow tasks. The Workflow service must already be
- * created in the Render dashboard with its slug matching config.workflowSlug.
- */
 export function createWorkflowDispatcher(
   config: WorkflowDispatcherConfig
 ): WorkflowDispatcher {
@@ -27,20 +22,23 @@ export function createWorkflowDispatcher(
   const render = new Render();
 
   return {
-    async dispatchResearch(args) {
+    async startVoiceSession(sessionId, taskToken) {
       try {
         const started = await render.workflows.startTask(
-          `${config.workflowSlug}/research`,
-          [args.sessionId, args.topic]
+          `${config.workflowSlug}/voiceSession`,
+          [sessionId, taskToken]
         );
-        const runId = (started as { taskRunId?: string }).taskRunId;
+        const runId = started.taskRunId;
         if (!runId) throw new AppError("UPSTREAM_WORKFLOW", "missing taskRunId");
+        logger.info({ sessionId, runId }, "voiceSession dispatched");
         return runId;
       } catch (err) {
-        logger.error({ err, args }, "dispatchResearch failed");
-        throw new AppError("UPSTREAM_WORKFLOW", "failed to dispatch research task", {
-          cause: err,
-        });
+        logger.error({ err, sessionId }, "startVoiceSession failed");
+        throw new AppError(
+          "UPSTREAM_WORKFLOW",
+          "failed to dispatch voiceSession task",
+          { cause: err }
+        );
       }
     },
   };

@@ -2,14 +2,13 @@ import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import type { Context } from "hono";
 import { serveStatic } from "@hono/node-server/serve-static";
-import type { EventBus, ResearchProvider, VoiceRuntime } from "./shared/ports.js";
+import type { EventBus } from "./shared/ports.js";
 import type { WorkflowDispatcher } from "./render/workflow-dispatcher.js";
+import type { SessionBroker } from "./render/session-broker.js";
 import {
   createSession,
   getBriefing,
   listSources,
-  setSessionStatus,
-  setSessionTopic,
 } from "./render/db.js";
 import { ok, fail } from "./shared/envelope.js";
 import { AppError } from "./shared/errors.js";
@@ -18,72 +17,36 @@ import { logger } from "./shared/logger.js";
 export interface RoutesDeps {
   databaseUrl: string;
   events: EventBus;
-  voice: VoiceRuntime;
-  research: ResearchProvider;
   dispatcher: WorkflowDispatcher;
+  broker: SessionBroker;
 }
 
 /**
- * All HTTP routes. WebSocket upgrade is handled outside Hono in server.ts.
- * Routes are resource-based and return the canonical { data, error, meta } envelope.
+ * HTTP routes. WebSockets (/ws/client, /ws/task) are handled by server.ts
+ * via the broker — not here.
  */
 export function buildRoutes(deps: RoutesDeps): Hono {
   const app = new Hono();
 
-  // ── health ────────────────────────────────────────────────────────
   app.get("/health", (c) => c.json({ ok: true, service: "ravendr-web" }));
 
-  // ── session lifecycle ────────────────────────────────────────────
-  app.post("/api/sessions", async (c) => {
+  // POST /api/start — create session, dispatch voiceSession task, return id.
+  app.post("/api/start", async (c) => {
     try {
       const session = await createSession(deps.databaseUrl, null);
-      return c.json(ok({ sessionId: session.id }));
-    } catch (err) {
-      return respondError(c, err);
-    }
-  });
-
-  // ── dispatch research (voice tool.call or HTTP equivalent) ───────
-  app.post("/api/sessions/:id/dispatch", async (c) => {
-    const sessionId = c.req.param("id");
-    try {
-      const body = (await c.req
-        .json<{ topic?: string }>()
-        .catch(() => ({} as { topic?: string }))) as { topic?: string };
-      const topic = typeof body.topic === "string" ? body.topic.trim() : "";
-      if (!topic) throw new AppError("VALIDATION", "topic is required");
-
-      await setSessionTopic(deps.databaseUrl, sessionId, topic);
-      await setSessionStatus(deps.databaseUrl, sessionId, "researching");
-
-      await deps.events.publish({
-        sessionId,
-        at: Date.now(),
-        kind: "session.started",
-        topic,
-      });
-
-      const runId = await deps.dispatcher.dispatchResearch({ sessionId, topic });
-      await deps.events.publish({
-        sessionId,
-        at: Date.now(),
-        kind: "workflow.dispatched",
-        runId,
-      });
-
+      const sessionId = session.id;
+      const token = deps.broker.issueToken(sessionId);
+      const runId = await deps.dispatcher.startVoiceSession(sessionId, token);
       return c.json(ok({ sessionId, runId }));
     } catch (err) {
       return respondError(c, err);
     }
   });
 
-  // ── phase-event SSE stream ────────────────────────────────────────
+  // SSE stream — phase events for the activity feed.
   app.get("/api/sessions/:id/events", (c) => {
     const sessionId = c.req.param("id");
     return streamSSE(c, async (stream) => {
-      // SSE is the ONLY path for phase events → browser.
-      // WebSocket (/ws) is reserved for audio + transcripts; it doesn't
-      // forward phase events (that was causing every event to duplicate).
       const unsubscribe = deps.events.subscribe(sessionId, (event) => {
         stream
           .writeSSE({
@@ -94,13 +57,11 @@ export function buildRoutes(deps: RoutesDeps): Hono {
           .catch(() => {});
       });
       stream.onAbort(() => unsubscribe());
-
-      // Keep open indefinitely — client closes via AbortController.
       await new Promise<void>(() => {});
     });
   });
 
-  // ── briefing read ────────────────────────────────────────────────
+  // Fetch a finished briefing + its sources.
   app.get("/api/briefings/:id", async (c) => {
     const id = c.req.param("id");
     try {
@@ -113,7 +74,7 @@ export function buildRoutes(deps: RoutesDeps): Hono {
     }
   });
 
-  // ── static frontend (plain ES modules, no build step) ────────────
+  // Static frontend.
   app.get("/", serveStatic({ path: "./static/index.html" }));
   app.use("/*", serveStatic({ root: "./static" }));
 

@@ -2,10 +2,10 @@ import { z } from "zod";
 
 /**
  * Two configs, one base shared:
- *   BaseConfig — what every service needs (Postgres + You.com)
- *   WebConfig  — web service only (adds AssemblyAI, Render dispatcher)
- *
- * The workflow task loads BaseConfig; the web service loads WebConfig.
+ *   BaseConfig — what every service needs (Postgres + You.com + Mastra's
+ *                Anthropic router + AssemblyAI, since the workflow task
+ *                owns the AssemblyAI WebSocket now)
+ *   WebConfig  — web service only (adds Render dispatch keys)
  */
 
 const BaseSchema = z.object({
@@ -19,22 +19,30 @@ const BaseSchema = z.object({
   YOU_API_KEY: z.string().min(1),
   YOU_BASE_URL: z.string().url().default("https://api.you.com/v1"),
 
-  // Mastra's agents drive plan + synthesize; their LLM is Anthropic via AI SDK.
+  // Mastra's model router reads ANTHROPIC_API_KEY directly from env.
   ANTHROPIC_API_KEY: z.string().min(1),
   ANTHROPIC_MODEL: z.string().default("claude-sonnet-4-20250514"),
-});
 
-const WebSchema = BaseSchema.extend({
+  // AssemblyAI is held by the voiceSession task (see src/render/tasks).
   ASSEMBLYAI_API_KEY: z.string().min(1),
   ASSEMBLYAI_AGENT_URL: z
     .string()
     .url()
     .default("wss://agents.assemblyai.com/v1/realtime"),
   ASSEMBLYAI_VOICE: z.string().default("claire"),
+});
 
+const WebSchema = BaseSchema.extend({
   RENDER_API_KEY: z.string().min(1),
   WORKFLOW_SLUG: z.string().default("ravendr-workflow"),
   RENDER_REGION: z.string().default("oregon"),
+
+  // Public URL of THIS web service, used by the voiceSession task to open
+  // its reverse WS back for audio tunneling.
+  PUBLIC_WEB_URL: z
+    .string()
+    .url()
+    .default("http://localhost:3000"),
 });
 
 export type BaseConfig = z.infer<typeof BaseSchema>;
@@ -70,5 +78,4 @@ export function loadWebConfig(env: NodeJS.ProcessEnv = process.env): WebConfig {
   return parsed.data;
 }
 
-// Back-compat: old callers import loadConfig (returns WebConfig).
 export const loadConfig = loadWebConfig;

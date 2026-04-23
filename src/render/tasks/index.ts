@@ -1,5 +1,16 @@
 /**
  * Workflow task entry-point. `npm run start:tasks` runs this file; the
- * @renderinc/sdk picks up `export`ed tasks and registers them with Render.
+ * @renderinc/sdk picks up exported tasks and registers them with Render.
+ *
+ * Tree:
+ *   voiceSession (root, long-lived — owns the AssemblyAI session)
+ *     └─ research (subtask — composes the pipeline)
+ *          ├─ plan_queries (leaf)
+ *          ├─ search_branch (leaf × N parallel)
+ *          └─ synthesize (leaf)
  */
-export { research } from "./research-task.js";
+export { voiceSession } from "./voice-session.js";
+export { research } from "./research.js";
+export { plan_queries } from "./plan-queries.js";
+export { search_branch } from "./search-branch.js";
+export { synthesize } from "./synthesize.js";
