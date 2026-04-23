@@ -31,12 +31,27 @@ function setMicActive(on) {
     iconStopEl.style.display = on ? "block" : "none";
   }
   statusEl?.classList.toggle("active", on);
+  const timer = document.getElementById("session-timer");
+  if (timer) {
+    timer.classList.toggle("active", on);
+    if (on) {
+      const started = Date.now();
+      const tick = () => {
+        if (!timer.classList.contains("active")) return;
+        const s = Math.floor((Date.now() - started) / 1000);
+        timer.textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+        requestAnimationFrame(() => setTimeout(tick, 500));
+      };
+      tick();
+    }
+  }
 }
 
 const KIND_CLASS = {
-  "plan.ready": "kind-plan",
-  "agent.planning": "kind-plan",
-  "agent.synthesizing": "kind-plan",
+  "session.started": "kind-assembly",
+  "plan.ready": "kind-mastra",
+  "agent.planning": "kind-mastra",
+  "agent.synthesizing": "kind-mastra",
   "youcom.call.started": "kind-youcom",
   "youcom.call.completed": "kind-youcom",
   "workflow.dispatched": "kind-render",
@@ -58,7 +73,7 @@ function setStatus(text) {
 }
 
 function clearEmptyState() {
-  const empty = logEl.querySelector(".card-empty");
+  const empty = logEl.querySelector(".empty");
   if (empty) empty.remove();
 }
 
@@ -79,18 +94,13 @@ function log(line, event) {
   const kindClass = event?.kind ? KIND_CLASS[event.kind] ?? "" : "";
   el.className = `line ${kindClass}`.trim();
   const stamp = new Date(event?.at ?? Date.now()).toLocaleTimeString();
-  el.innerHTML = `<span class="stamp">${stamp}</span> · ${line}`;
+  el.innerHTML = `<span class="indicator"></span><span class="stamp">${stamp}</span><span class="msg">${line}</span>`;
   logEl.appendChild(el);
   logEl.scrollTop = logEl.scrollHeight;
 }
 
 function handleTranscript(msg) {
   if (msg.role === "assistant") {
-    // If agent speaks something substantial after briefing has been loaded,
-    // assume it's reading the briefing and suppress the browser-TTS fallback.
-    if (lastBriefingText && msg.text && msg.text.length > 80) {
-      agentSpokeAfterBriefing = true;
-    }
     chatBubble("assistant", msg.text);
     return;
   }
@@ -154,9 +164,6 @@ function summarize(e) {
   }
 }
 
-let lastBriefingText = "";
-let ttsUtterance = null;
-
 async function showBriefing(briefingId) {
   try {
     const { briefing, sources } = await fetchBriefing(briefingId);
@@ -172,44 +179,9 @@ async function showBriefing(briefingId) {
       briefingSources.appendChild(row);
     }
     briefingEl.classList.add("show");
-    lastBriefingText = briefing.content ?? "";
-    const readBtn = document.getElementById("read-briefing");
-    if (readBtn) readBtn.style.display = "inline-flex";
-    setStatus("Briefing ready. Scroll to read — or press Read aloud.");
-
-    // Browser-TTS fallback: the AssemblyAI agent is unreliable at reading
-    // tool.result payloads out loud. After 4s with no agent speech, we
-    // read the briefing via speechSynthesis so the user always hears it.
-    if ("speechSynthesis" in window && lastBriefingText) {
-      setTimeout(() => {
-        if (!agentSpokeAfterBriefing && lastBriefingText) {
-          speakBriefing();
-        }
-      }, 4000);
-    }
+    setStatus("Briefing ready.");
   } catch (err) {
     setStatus(`Failed to load briefing: ${err.message}`);
-  }
-}
-
-let agentSpokeAfterBriefing = false;
-
-function speakBriefing() {
-  if (!("speechSynthesis" in window) || !lastBriefingText) return;
-  try {
-    window.speechSynthesis.cancel();
-    ttsUtterance = new SpeechSynthesisUtterance(lastBriefingText);
-    ttsUtterance.rate = 1.0;
-    ttsUtterance.pitch = 1.0;
-    window.speechSynthesis.speak(ttsUtterance);
-  } catch (err) {
-    console.warn("browser TTS failed:", err);
-  }
-}
-
-function stopSpeakingBriefing() {
-  if ("speechSynthesis" in window) {
-    try { window.speechSynthesis.cancel(); } catch {}
   }
 }
 
@@ -293,7 +265,3 @@ async function stop() {
 }
 
 micEl.addEventListener("click", () => (active ? stop() : start()));
-
-// Expose TTS controls to the briefing buttons in index.html
-window.__readBriefing = speakBriefing;
-window.__stopBriefing = stopSpeakingBriefing;

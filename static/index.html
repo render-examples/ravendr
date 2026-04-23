@@ -1,18 +1,15 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="dark">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Ravendr — voice-first research on the Render stack</title>
     <meta name="description" content="Tap the mic, say a topic. Render Workflows orchestrates AssemblyAI, Mastra, and You.com live — voice in, briefing out." />
 
-    <!-- Render favicon (light + any) -->
-    <link rel="icon" href="https://render.com/favicon.ico" type="image/x-icon" />
-    <link rel="icon" href="https://render.com/favicon-32x32.png" type="image/png" sizes="32x32" />
+    <link rel="icon" href="https://render.com/icon.svg" type="image/svg+xml" />
     <link rel="shortcut icon" href="https://render.com/favicon.ico" />
     <link rel="apple-touch-icon" href="https://render.com/apple-touch-icon.png" />
 
-    <!-- Social unfurl (Open Graph + Twitter Card) -->
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Ravendr" />
     <meta property="og:title" content="Ravendr — voice-first research on the Render stack" />
@@ -21,486 +18,511 @@
     <meta property="og:image" content="https://ravendr-web.onrender.com/images/og-image.png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
-    <meta property="og:image:alt" content="Ravendr — voice-first research on the Render stack" />
-
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="Ravendr — voice-first research on the Render stack" />
     <meta name="twitter:description" content="Tap the mic, say a topic. Render Workflows orchestrates AssemblyAI, Mastra, and You.com live — voice in, briefing out." />
     <meta name="twitter:image" content="https://ravendr-web.onrender.com/images/og-image.png" />
-    <meta name="twitter:image:alt" content="Ravendr — voice-first research on the Render stack" />
+
+    <script>
+      (function () {
+        var t = localStorage.getItem("theme");
+        if (!t)
+          t = window.matchMedia("(prefers-color-scheme: dark)").matches
+            ? "dark"
+            : "light";
+        document.documentElement.className = t;
+      })();
+    </script>
+
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Roboto:wght@300&family=JetBrains+Mono:wght@400;500&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Roboto:wght@300&display=swap"
       rel="stylesheet"
     />
     <style>
-      /* ── DDS design tokens (from R4ph-t/DDS src/styles/globals.css) ── */
+      *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
       :root {
-        --color-background: #ffffff;
-        --color-foreground: #18181b;
-        --color-card: #ffffff;
-        --color-card-foreground: #18181b;
-        --color-primary: #9333ea;
-        --color-primary-foreground: #ffffff;
-        --color-secondary: #facc15;
-        --color-muted: #f4f4f5;
-        --color-muted-foreground: #71717a;
-        --color-accent: #f4f4f5;
-        --color-destructive: #ef4444;
-        --color-border: #e4e4e7;
-        --color-input: #e4e4e7;
-        --color-input-background: #fafafa;
-        --color-ring: #9333ea;
-
-        /* DDS: square corners everywhere */
-        --radius: 0;
-
-        /* Platform accents for chain ribbon */
-        --render: #9333ea;
-        --assembly: #0891b2;
-        --mastra: #ea580c;
-        --you: #7c3aed;
-        --active: #16a34a;
+        --render-purple: #6c63ff;
+        --render-purple-hover: #5a52d5;
+        --green: #22c55e;
+        --red: #ef4444;
+        --amber: #f59e0b;
+        --blue: #3b82f6;
+        --cyan: #06b6d4;
+        --orange: #ea580c;
       }
 
-      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html.light {
+        --bg: #fafafa;
+        --surface: #ffffff;
+        --border: rgba(0, 0, 0, 0.08);
+        --text: #18181b;
+        --text-muted: #52525b;
+        --text-dim: #a1a1aa;
+        --text-strong: #09090b;
+        --overlay-subtle: rgba(0, 0, 0, 0.03);
+        --overlay-medium: rgba(0, 0, 0, 0.05);
+        --overlay-strong: rgba(0, 0, 0, 0.08);
+        --sep: #e4e4e7;
+      }
 
-      html {
-        background: var(--color-background);
-        color: var(--color-foreground);
+      html.dark {
+        --bg: #0a0a0a;
+        --surface: #141416;
+        --border: rgba(255, 255, 255, 0.08);
+        --text: #e4e4e7;
+        --text-muted: #71717a;
+        --text-dim: #52525b;
+        --text-strong: #fafafa;
+        --overlay-subtle: rgba(255, 255, 255, 0.04);
+        --overlay-medium: rgba(255, 255, 255, 0.06);
+        --overlay-strong: rgba(255, 255, 255, 0.08);
+        --sep: #27272a;
       }
 
       body {
         font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI",
-          "Helvetica Neue", Arial, sans-serif;
-        line-height: 1.5;
-        -webkit-font-smoothing: antialiased;
-        min-height: 100vh;
-        min-height: 100dvh;
+          Roboto, sans-serif;
+        background: var(--bg);
+        color: var(--text);
+        height: 100dvh;
         display: flex;
         flex-direction: column;
       }
 
-      h1, h2, h3, h4, h5, h6 {
-        font-family: "Roboto", -apple-system, sans-serif;
-        font-weight: 300;
-        line-height: 1.25;
-      }
+      h1, h2, h3 { font-family: "Roboto", -apple-system, sans-serif; font-weight: 300; }
+      a { color: var(--render-purple); text-decoration: none; }
+      a:hover { text-decoration: underline; }
 
-      /* ── Top nav ────────────────────────────────────────── */
-      .nav {
+      /* ── Header ─────────────────────────────────────────── */
+      header {
+        padding: 0.625rem 1.25rem;
+        border-bottom: 1px solid var(--border);
         display: flex;
         align-items: center;
-        justify-content: space-between;
-        padding: 0.875rem 1.5rem;
-        border-bottom: 1px solid var(--color-border);
-        background: var(--color-background);
+        gap: 0.75rem;
+        background: var(--bg);
         position: sticky;
         top: 0;
         z-index: 10;
       }
-
-      .nav-brand {
-        display: flex;
-        align-items: center;
-        gap: 0.625rem;
-        font-size: 0.9375rem;
+      header .title-group { display: flex; align-items: center; gap: 0.5rem; }
+      header .dot {
+        width: 8px; height: 8px; border-radius: 50%;
+        background: var(--green);
+        box-shadow: 0 0 8px rgba(34, 197, 94, 0.4);
+        flex-shrink: 0;
+      }
+      header h1 {
+        font-size: 0.875rem;
         font-weight: 600;
+        font-family: "Inter", sans-serif;
+        color: var(--text-strong);
         letter-spacing: -0.01em;
       }
-      .nav-brand .dot {
-        width: 8px; height: 8px;
-        background: var(--color-primary);
+      header .tag {
+        font-size: 0.6rem;
+        padding: 0.125rem 0.4rem;
+        background: var(--overlay-medium);
+        color: var(--text-muted);
+        font-weight: 500;
+        letter-spacing: 0.02em;
+        text-transform: uppercase;
+        border: 1px solid var(--border);
       }
-
-      .nav-actions {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
+      header .timer {
+        font-size: 0.65rem;
+        padding: 0.2rem 0.5rem;
+        background: rgba(245, 158, 11, 0.1);
+        color: var(--amber);
+        font-weight: 500;
+        border: 1px solid rgba(245, 158, 11, 0.3);
+        font-variant-numeric: tabular-nums;
+        display: none;
       }
-      .btn {
+      header .timer.active { display: inline-flex; }
+      header .actions { margin-left: auto; display: flex; align-items: center; gap: 0.5rem; }
+      .header-btn {
+        font-size: 0.725rem;
+        font-weight: 500;
+        padding: 0.3rem 0.6rem;
+        border: 1px solid var(--border);
+        background: transparent;
+        color: var(--text-muted);
+        cursor: pointer;
+        transition: all 0.15s;
+        text-decoration: none;
         display: inline-flex;
         align-items: center;
-        gap: 0.5rem;
-        padding: 0.5rem 0.875rem;
-        border: 1px solid var(--color-border);
-        background: var(--color-background);
-        color: var(--color-foreground);
-        font-family: inherit;
-        font-size: 0.8125rem;
-        font-weight: 500;
-        text-decoration: none;
-        cursor: pointer;
-        border-radius: 0;
-        transition: border-color 0.15s, background 0.15s;
+        gap: 0.3rem;
+        font-family: "Inter", sans-serif;
       }
-      .btn:hover {
-        border-color: var(--color-foreground);
-      }
-      .btn.primary {
-        background: var(--color-primary);
-        border-color: var(--color-primary);
-        color: var(--color-primary-foreground);
-      }
-      .btn.primary:hover {
-        background: #7e22ce;
-        border-color: #7e22ce;
-      }
-      .btn svg { width: 16px; height: 16px; }
-      .btn.deploy img { height: 24px; width: auto; display: block; }
-      .btn.deploy { padding: 0.25rem 0.5rem; }
+      .header-btn:hover { background: var(--overlay-subtle); color: var(--text); text-decoration: none; }
+      .header-btn.primary { background: var(--render-purple); border-color: var(--render-purple); color: #fff; }
+      .header-btn.primary:hover { background: var(--render-purple-hover); }
+      .header-btn svg { width: 12px; height: 12px; flex-shrink: 0; }
 
-      /* ── Main shell ─────────────────────────────────────── */
+      /* ── Main content ───────────────────────────────────── */
       main {
         flex: 1;
+        overflow-y: auto;
+        padding: 2.5rem 1.5rem 2rem;
         display: flex;
         flex-direction: column;
         align-items: center;
-        padding: 3rem 1.5rem 4rem;
       }
 
       .container {
         width: 100%;
-        max-width: 880px;
+        max-width: 720px;
         display: flex;
         flex-direction: column;
         align-items: center;
       }
 
-      /* ── Hero ───────────────────────────────────────────── */
-      .hero { text-align: center; margin-bottom: 2.5rem; }
-      .hero h1 {
-        font-size: 2.5rem;
-        letter-spacing: -0.02em;
+      .hero { text-align: center; margin-bottom: 2rem; max-width: 560px; }
+      .hero h2 {
+        font-size: 1.625rem;
+        color: var(--text-strong);
+        letter-spacing: -0.01em;
         margin-bottom: 0.5rem;
       }
       .hero p {
-        color: var(--color-muted-foreground);
-        font-size: 1rem;
+        font-size: 0.875rem;
+        color: var(--text-muted);
+        line-height: 1.6;
       }
 
-      /* ── Orb (kept circular — mic affordance) ──────────── */
-      .orb-section {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        margin-bottom: 2.5rem;
-      }
+      /* ── Orb (mic) ──────────────────────────────────────── */
       .orb-wrap {
         position: relative;
-        width: 120px;
-        height: 120px;
-        margin-bottom: 1rem;
+        width: 100px;
+        height: 100px;
+        margin-bottom: 0.75rem;
       }
       .orb-ring {
         position: absolute;
         inset: 0;
         border-radius: 50%;
-        border: 1px solid var(--color-border);
+        border: 1px solid var(--border);
         transition: border-color 0.3s;
       }
       .orb-wrap.active .orb-ring {
-        border-color: var(--active);
+        border-color: var(--render-purple);
         animation: orb-breathe 2.5s ease-in-out infinite;
       }
       @keyframes orb-breathe {
         0%, 100% { transform: scale(1); opacity: 1; }
-        50% { transform: scale(1.07); opacity: 0.5; }
+        50% { transform: scale(1.08); opacity: 0.5; }
       }
       .orb-btn {
         position: absolute;
-        inset: 10px;
+        inset: 8px;
         border-radius: 50%;
         border: none;
-        background: var(--color-foreground);
-        color: var(--color-background);
+        background: var(--text-strong);
+        color: var(--bg);
         cursor: pointer;
         display: grid;
         place-items: center;
-        transition: transform 0.12s;
+        transition: transform 0.12s, background 0.2s;
       }
       .orb-btn:hover { transform: scale(1.03); }
       .orb-btn:active { transform: scale(0.97); }
-      .orb-btn.recording { background: var(--color-destructive); }
-      .orb-btn svg { width: 30px; height: 30px; }
-
+      .orb-btn.recording { background: var(--red); color: #fff; }
+      .orb-btn svg { width: 26px; height: 26px; }
       .orb-status {
-        font-family: "JetBrains Mono", monospace;
-        font-size: 0.8125rem;
-        color: var(--color-muted-foreground);
+        font-size: 0.75rem;
+        color: var(--text-dim);
+        font-variant-numeric: tabular-nums;
         min-height: 1.2em;
+        margin-bottom: 1.75rem;
       }
-      .orb-status.active { color: var(--active); }
-      .orb-status.error { color: var(--color-destructive); }
+      .orb-status.active { color: var(--render-purple); }
+      .orb-status.error { color: var(--red); }
 
       /* ── Chain ribbon ───────────────────────────────────── */
       .ribbon {
         width: 100%;
         display: grid;
         grid-template-columns: repeat(4, 1fr);
-        background: var(--color-card);
-        border: 1px solid var(--color-border);
-        margin-bottom: 1rem;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        margin-bottom: 1.5rem;
       }
       .node {
-        padding: 1rem 1.125rem;
-        border-right: 1px solid var(--color-border);
+        padding: 0.75rem 0.875rem;
+        border-right: 1px solid var(--border);
         display: flex;
         flex-direction: column;
-        gap: 0.5rem;
+        gap: 0.375rem;
         min-width: 0;
       }
       .node:last-child { border-right: none; }
-      .node.active { background: var(--color-muted); }
+      .node.active { background: var(--overlay-subtle); }
       .node .dot {
-        width: 8px; height: 8px;
-        background: var(--color-border);
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--border);
         transition: all 0.2s;
       }
       .node.active .dot {
         background: currentColor;
-        box-shadow: 0 0 0 4px color-mix(in oklab, currentColor 20%, transparent);
-        animation: dot-pulse 1.2s ease-in-out infinite;
+        box-shadow: 0 0 6px currentColor;
+        animation: pulse 1.2s ease-in-out infinite;
       }
-      .node.done .dot { background: currentColor; }
-      @keyframes dot-pulse {
-        50% { transform: scale(1.2); }
-      }
+      .node.done .dot { background: var(--green); box-shadow: 0 0 6px rgba(34,197,94,0.4); }
+      @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
       .node .label {
-        font-size: 0.6875rem;
+        font-size: 0.625rem;
         font-weight: 600;
-        letter-spacing: 0.08em;
+        letter-spacing: 0.06em;
         text-transform: uppercase;
+        color: var(--text-strong);
       }
       .node .sub {
-        font-family: "JetBrains Mono", monospace;
-        font-size: 0.6875rem;
-        color: var(--color-muted-foreground);
+        font-size: 0.625rem;
+        color: var(--text-dim);
         min-height: 1em;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
+        font-variant-numeric: tabular-nums;
       }
-      .node[data-lane="assembly"] { color: var(--assembly); }
-      .node[data-lane="render"]   { color: var(--render); }
-      .node[data-lane="mastra"]   { color: var(--mastra); }
-      .node[data-lane="youcom"]   { color: var(--you); }
+      .node[data-lane="assembly"] { color: var(--cyan); }
+      .node[data-lane="render"]   { color: var(--render-purple); }
+      .node[data-lane="mastra"]   { color: var(--orange); }
+      .node[data-lane="youcom"]   { color: var(--blue); }
 
-      /* ── Card (DDS pattern: 1px border, square corners, flat) ── */
-      .card {
+      /* ── Activity feed (timeline) ───────────────────────── */
+      .panel {
         width: 100%;
-        background: var(--color-card);
-        border: 1px solid var(--color-border);
+        background: var(--surface);
+        border: 1px solid var(--border);
         margin-bottom: 1rem;
       }
-      .card-header {
+      .panel-header {
         display: flex;
         align-items: center;
         gap: 0.625rem;
-        padding: 0.75rem 1rem;
-        border-bottom: 1px solid var(--color-border);
-        background: var(--color-muted);
+        padding: 0.625rem 0.875rem;
+        border-bottom: 1px solid var(--border);
       }
-      .card-header .label {
-        font-size: 0.6875rem;
-        text-transform: uppercase;
-        letter-spacing: 0.08em;
-        color: var(--color-muted-foreground);
+      .panel-header .label {
+        font-size: 0.7rem;
         font-weight: 600;
+        color: var(--text-strong);
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
       }
-      .card-header .pulse {
-        width: 8px; height: 8px;
-        background: var(--color-border);
+      .panel-header .spinner {
+        width: 6px; height: 6px; border-radius: 50%;
+        background: var(--border);
       }
-      .card-header.live .pulse {
-        background: var(--active);
-        box-shadow: 0 0 0 3px color-mix(in oklab, var(--active) 22%, transparent);
-        animation: dot-pulse 1.2s ease-in-out infinite;
+      .panel-header.live .spinner {
+        background: var(--render-purple);
+        box-shadow: 0 0 6px var(--render-purple);
+        animation: pulse 1.2s ease-in-out infinite;
       }
-      .card-body {
-        max-height: 380px;
+      .panel-body {
+        max-height: 320px;
         overflow-y: auto;
-        padding: 0.875rem 1rem;
+        padding: 0.75rem 0.875rem;
       }
-      .card-body::-webkit-scrollbar { width: 4px; }
-      .card-body::-webkit-scrollbar-track { background: transparent; }
-      .card-body::-webkit-scrollbar-thumb { background: var(--color-border); }
-      .card-empty {
+      .panel-body::-webkit-scrollbar { width: 4px; }
+      .panel-body::-webkit-scrollbar-thumb { background: var(--overlay-strong); }
+
+      .empty {
         text-align: center;
-        color: var(--color-muted-foreground);
-        font-size: 0.875rem;
-        padding: 2rem 0;
+        color: var(--text-dim);
+        font-size: 0.8rem;
+        padding: 1.5rem 0;
       }
 
-      /* Bubbles (voice transcripts) */
+      /* Bubble transcripts */
       .bubble {
-        padding: 0.625rem 0.75rem;
-        border: 1px solid var(--color-border);
-        background: var(--color-muted);
+        padding: 0.5rem 0.75rem;
+        border: 1px solid var(--border);
+        background: var(--overlay-subtle);
         margin-bottom: 0.5rem;
-        animation: msg-in 0.2s ease-out;
+        animation: fadeUp 0.2s ease-out;
       }
-      @keyframes msg-in {
+      @keyframes fadeUp {
         from { opacity: 0; transform: translateY(4px); }
         to { opacity: 1; transform: translateY(0); }
       }
-      .bubble.user {
-        margin-left: 1.5rem;
-      }
-      .bubble.assistant {
-        margin-right: 1.5rem;
-        border-left: 2px solid var(--color-primary);
-      }
+      .bubble.user { margin-left: 1.25rem; }
+      .bubble.assistant { margin-right: 1.25rem; border-left: 2px solid var(--render-purple); }
       .bubble .who {
-        font-size: 0.6875rem;
+        font-size: 0.625rem;
         text-transform: uppercase;
-        letter-spacing: 0.06em;
-        color: var(--color-muted-foreground);
+        letter-spacing: 0.05em;
+        color: var(--text-dim);
         font-weight: 600;
-        margin-bottom: 0.2rem;
+        margin-bottom: 0.125rem;
       }
       .bubble .text {
-        font-size: 0.9375rem;
-        color: var(--color-foreground);
+        font-size: 0.85rem;
+        color: var(--text);
+        line-height: 1.5;
       }
 
-      /* Activity lines */
+      /* Activity lines (timeline) */
       .line {
-        font-family: "JetBrains Mono", monospace;
+        display: flex;
+        align-items: flex-start;
+        gap: 0.625rem;
+        padding: 0.375rem 0;
         font-size: 0.75rem;
-        color: var(--color-muted-foreground);
-        padding: 3px 0;
-        animation: msg-in 0.2s ease-out;
+        color: var(--text-muted);
+        border-left: 2px solid var(--border);
+        padding-left: 0.875rem;
+        margin-left: 3px;
+        animation: fadeUp 0.2s ease-out;
       }
-      .line .stamp { color: var(--color-foreground); font-weight: 500; }
-      .line.kind-render  { color: var(--render); }
-      .line.kind-mastra  { color: var(--mastra); }
-      .line.kind-youcom  { color: var(--you); }
-      .line.kind-briefing { color: var(--color-foreground); font-weight: 600; }
+      .line .indicator {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--border);
+        margin-left: -1.325rem;
+        margin-top: 0.25rem;
+        flex-shrink: 0;
+      }
+      .line.kind-render    .indicator { background: var(--render-purple); box-shadow: 0 0 4px var(--render-purple); }
+      .line.kind-mastra    .indicator { background: var(--orange); box-shadow: 0 0 4px var(--orange); }
+      .line.kind-youcom    .indicator { background: var(--blue); box-shadow: 0 0 4px var(--blue); }
+      .line.kind-assembly  .indicator { background: var(--cyan); box-shadow: 0 0 4px var(--cyan); }
+      .line.kind-briefing  .indicator { background: var(--green); box-shadow: 0 0 4px var(--green); }
+      .line .stamp {
+        color: var(--text-dim);
+        font-variant-numeric: tabular-nums;
+        font-size: 0.7rem;
+        flex-shrink: 0;
+      }
+      .line .msg { flex: 1; line-height: 1.5; color: var(--text); }
 
       /* ── Briefing ───────────────────────────────────────── */
       .briefing {
         width: 100%;
-        background: var(--color-card);
-        border: 1px solid var(--color-border);
-        padding: 1.5rem 1.75rem;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        padding: 1.25rem 1.5rem;
+        margin-bottom: 1rem;
         display: none;
-        animation: msg-in 0.25s ease-out;
+        animation: fadeUp 0.3s ease-out;
       }
       .briefing.show { display: block; }
-      .briefing h2 {
-        font-size: 1.5rem;
-        margin-bottom: 1rem;
+      .briefing h3 {
+        font-size: 1.1rem;
+        color: var(--text-strong);
+        margin-bottom: 0.75rem;
       }
       .briefing .body {
-        font-size: 0.9375rem;
-        line-height: 1.65;
+        font-size: 0.875rem;
+        line-height: 1.7;
         white-space: pre-wrap;
-        margin-bottom: 1.25rem;
+        color: var(--text);
+        margin-bottom: 1rem;
       }
       .sources {
-        padding-top: 1rem;
-        border-top: 1px solid var(--color-border);
+        padding-top: 0.75rem;
+        border-top: 1px solid var(--border);
       }
       .sources-label {
-        font-size: 0.6875rem;
+        font-size: 0.65rem;
         text-transform: uppercase;
-        letter-spacing: 0.08em;
-        color: var(--color-muted-foreground);
+        letter-spacing: 0.04em;
+        color: var(--text-dim);
         font-weight: 600;
         margin-bottom: 0.5rem;
       }
       .source {
-        font-size: 0.875rem;
-        padding: 0.5rem 0.75rem;
-        border: 1px solid var(--color-border);
+        font-size: 0.8rem;
+        padding: 0.5rem 0.625rem;
+        border: 1px solid var(--border);
         margin-bottom: 0.375rem;
       }
-      .source a { color: var(--color-primary); text-decoration: none; font-weight: 500; }
-      .source a:hover { text-decoration: underline; }
-      .source .snip { display: block; color: var(--color-muted-foreground); margin-top: 2px; font-size: 0.8125rem; }
+      .source a { font-weight: 500; }
+      .source .snip { display: block; color: var(--text-dim); margin-top: 2px; font-size: 0.75rem; }
 
       /* ── Footer ─────────────────────────────────────────── */
       footer {
-        padding: 2rem 1.5rem;
-        border-top: 1px solid var(--color-border);
-        background: var(--color-muted);
-        text-align: center;
-      }
-      footer .stack {
-        font-family: "JetBrains Mono", monospace;
-        font-size: 0.75rem;
-        color: var(--color-muted-foreground);
-        margin-bottom: 0.5rem;
-      }
-      footer .links {
+        padding: 0.625rem 1.25rem;
+        border-top: 1px solid var(--border);
         display: flex;
+        align-items: center;
         justify-content: center;
-        gap: 1.25rem;
-        font-size: 0.8125rem;
+        gap: 0.375rem;
+        font-size: 0.675rem;
+        color: var(--text-dim);
+        background: var(--bg);
       }
-      footer a {
-        color: var(--color-muted-foreground);
-        text-decoration: none;
-      }
-      footer a:hover { color: var(--color-foreground); }
+      footer a { color: var(--text-muted); }
+      footer a:hover { color: var(--text); }
+      footer .sep { color: var(--sep); }
 
       /* Responsive */
       @media (max-width: 640px) {
-        .nav { padding: 0.75rem 1rem; flex-wrap: wrap; gap: 0.5rem; }
-        .nav-actions { flex-wrap: wrap; }
-        .hero h1 { font-size: 1.875rem; }
+        header { padding: 0.5rem 0.75rem; flex-wrap: wrap; }
+        header .actions { flex-wrap: wrap; gap: 0.25rem; }
+        header .tag { display: none; }
         .ribbon { grid-template-columns: repeat(2, 1fr); }
-        .node { border-bottom: 1px solid var(--color-border); }
+        .node { border-bottom: 1px solid var(--border); }
         .node:nth-child(even) { border-right: none; }
         .node:nth-child(3), .node:nth-child(4) { border-bottom: none; }
       }
     </style>
   </head>
   <body>
-    <nav class="nav">
-      <div class="nav-brand">
+    <header>
+      <div class="title-group">
         <div class="dot"></div>
-        Ravendr
+        <h1>Ravendr</h1>
+        <span class="tag">Voice-first research · Render</span>
+        <span class="timer" id="session-timer">0:00</span>
       </div>
-      <div class="nav-actions">
-        <a class="btn" href="https://github.com/ojusave/ravendr" target="_blank" rel="noopener" aria-label="GitHub">
-          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5a12 12 0 0 0-3.79 23.4c.6.11.82-.26.82-.58v-2.05c-3.34.72-4.04-1.6-4.04-1.6-.54-1.38-1.33-1.75-1.33-1.75-1.08-.74.08-.73.08-.73 1.2.08 1.83 1.23 1.83 1.23 1.07 1.83 2.8 1.3 3.49.99.1-.78.42-1.3.76-1.6-2.66-.3-5.46-1.33-5.46-5.93 0-1.31.47-2.38 1.23-3.22-.12-.3-.53-1.52.12-3.17 0 0 1-.32 3.3 1.23a11.49 11.49 0 0 1 6 0c2.3-1.55 3.3-1.23 3.3-1.23.65 1.65.24 2.87.12 3.17.77.84 1.23 1.91 1.23 3.22 0 4.61-2.8 5.62-5.48 5.92.43.37.81 1.1.81 2.22v3.29c0 .32.22.7.83.58A12 12 0 0 0 12 .5z"/></svg>
+      <div class="actions">
+        <a class="header-btn" href="https://github.com/ojusave/ravendr" target="_blank" rel="noopener">
+          <svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M12 .5a12 12 0 0 0-3.79 23.4c.6.11.82-.26.82-.58v-2.05c-3.34.72-4.04-1.6-4.04-1.6-.54-1.38-1.33-1.75-1.33-1.75-1.08-.74.08-.73.08-.73 1.2.08 1.83 1.23 1.83 1.23 1.07 1.83 2.8 1.3 3.49.99.1-.78.42-1.3.76-1.6-2.66-.3-5.46-1.33-5.46-5.93 0-1.31.47-2.38 1.23-3.22-.12-.3-.53-1.52.12-3.17 0 0 1-.32 3.3 1.23a11.49 11.49 0 0 1 6 0c2.3-1.55 3.3-1.23 3.3-1.23.65 1.65.24 2.87.12 3.17.77.84 1.23 1.91 1.23 3.22 0 4.61-2.8 5.62-5.48 5.92.43.37.81 1.1.81 2.22v3.29c0 .32.22.7.83.58A12 12 0 0 0 12 .5z"/></svg>
           GitHub
         </a>
-        <a class="btn deploy" href="https://render.com/deploy?repo=https://github.com/ojusave/ravendr" target="_blank" rel="noopener">
-          <img src="https://render.com/images/deploy-to-render-button.svg" alt="Deploy to Render" />
+        <a href="https://render.com/deploy?repo=https://github.com/ojusave/ravendr" target="_blank" rel="noopener" title="Deploy to Render">
+          <img src="https://render.com/images/deploy-to-render-button.svg" alt="Deploy to Render" style="height:28px;vertical-align:middle" />
         </a>
-        <a class="btn primary" href="https://render.com/register?utm_source=github&utm_medium=referral&utm_campaign=ojus_demos&utm_content=navbar_button" target="_blank" rel="noopener">
+        <a class="header-btn primary" id="signup-link" href="#" target="_blank" rel="noopener">
           Sign up on Render
         </a>
+        <button class="header-btn" onclick="toggleTheme()" title="Toggle theme" aria-label="Toggle theme">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2m0 18v2M4.22 4.22l1.42 1.42m12.73 12.73l1.42 1.42M1 12h2m18 0h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+        </button>
       </div>
-    </nav>
+    </header>
 
     <main>
       <div class="container">
         <div class="hero">
-          <h1>Ravendr</h1>
-          <p>Tap the orb, say a topic. The Render stack researches live.</p>
+          <h2>Tap the orb, say a topic.</h2>
+          <p>Render Workflows orchestrates AssemblyAI, Mastra, and You.com live — voice in, briefing out. Every step is a checkpointed task you can see fire on the ribbon below.</p>
         </div>
 
-        <div class="orb-section">
-          <div class="orb-wrap" id="orbWrap">
-            <div class="orb-ring"></div>
-            <button class="orb-btn" id="mic" aria-label="Start voice session">
-              <svg id="iconMic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z" />
-                <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-                <line x1="12" y1="19" x2="12" y2="22" />
-              </svg>
-              <svg id="iconStop" viewBox="0 0 24 24" fill="currentColor" style="display:none">
-                <rect x="7" y="7" width="10" height="10" />
-              </svg>
-            </button>
-          </div>
-          <span class="orb-status" id="status">Tap to begin</span>
+        <div class="orb-wrap" id="orbWrap">
+          <div class="orb-ring"></div>
+          <button class="orb-btn" id="mic" aria-label="Start voice session">
+            <svg id="iconMic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z" />
+              <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+              <line x1="12" y1="19" x2="12" y2="22" />
+            </svg>
+            <svg id="iconStop" viewBox="0 0 24 24" fill="currentColor" style="display:none">
+              <rect x="7" y="7" width="10" height="10" />
+            </svg>
+          </button>
         </div>
+        <div class="orb-status" id="status">Tap to begin</div>
 
         <div class="ribbon" id="ribbon">
           <div class="node" data-lane="assembly"><div class="dot"></div><div class="label">AssemblyAI</div><div class="sub" data-field="sub">voice i/o</div></div>
@@ -509,32 +531,18 @@
           <div class="node" data-lane="youcom"><div class="dot"></div><div class="label">You.com</div><div class="sub" data-field="sub">research</div></div>
         </div>
 
-        <div class="card">
-          <div class="card-header" id="feed-header">
-            <span class="pulse"></span>
-            <span class="label" id="feed-label">activity</span>
+        <div class="panel">
+          <div class="panel-header" id="feed-header">
+            <span class="spinner"></span>
+            <span class="label" id="feed-label">Activity</span>
           </div>
-          <div class="card-body" id="log">
-            <p class="card-empty">Conversation and backend progress stream in here.</p>
+          <div class="panel-body" id="log">
+            <div class="empty">Conversation and backend progress stream in here.</div>
           </div>
         </div>
 
         <div class="briefing" id="briefing">
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:1rem;margin-bottom:1rem;flex-wrap:wrap;">
-            <h2 id="briefing-topic" style="margin:0;"></h2>
-            <div style="display:flex;gap:0.5rem;">
-              <button id="read-briefing" class="btn primary" style="display:none;" onclick="window.__readBriefing?.()">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" width="14" height="14">
-                  <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
-                  <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
-                </svg>
-                Read aloud
-              </button>
-              <button id="stop-briefing" class="btn" onclick="window.__stopBriefing?.()">
-                Stop
-              </button>
-            </div>
-          </div>
+          <h3 id="briefing-topic"></h3>
           <div class="body" id="briefing-body"></div>
           <div class="sources">
             <div class="sources-label">Sources</div>
@@ -545,13 +553,39 @@
     </main>
 
     <footer>
-      <div class="stack">assembly · render · mastra · you.com</div>
-      <div class="links">
-        <a href="https://github.com/ojusave/ravendr" target="_blank" rel="noopener">GitHub</a>
-        <a href="https://render.com/deploy?repo=https://github.com/ojusave/ravendr" target="_blank" rel="noopener">Deploy to Render</a>
-        <a href="https://render.com/register?utm_source=github&utm_medium=referral&utm_campaign=ojus_demos&utm_content=footer_link" target="_blank" rel="noopener">Sign up on Render</a>
-      </div>
+      <span>Built with</span>
+      <a href="https://www.assemblyai.com/docs/voice-agents/voice-agent-api" target="_blank" rel="noopener">AssemblyAI</a>
+      <span class="sep">·</span>
+      <a href="https://render.com/docs/workflows" target="_blank" rel="noopener">Render Workflows</a>
+      <span class="sep">·</span>
+      <a href="https://mastra.ai" target="_blank" rel="noopener">Mastra</a>
+      <span class="sep">·</span>
+      <a href="https://you.com" target="_blank" rel="noopener">You.com</a>
+      <span class="sep">·</span>
+      <a id="signup-footer" href="#" target="_blank" rel="noopener">Sign up on Render</a>
+      <span class="sep">·</span>
+      <a href="https://github.com/ojusave/ravendr" target="_blank" rel="noopener">GitHub</a>
     </footer>
+
+    <script>
+      function toggleTheme() {
+        const html = document.documentElement;
+        const next = html.className === "dark" ? "light" : "dark";
+        html.className = next;
+        localStorage.setItem("theme", next);
+      }
+      function renderSignupUrlWithUtms(content) {
+        const params = new URLSearchParams({
+          utm_source: "github",
+          utm_medium: "referral",
+          utm_campaign: "ojus_demos",
+          utm_content: content || "footer_link",
+        });
+        return "https://render.com/register?" + params.toString();
+      }
+      document.getElementById("signup-link").href = renderSignupUrlWithUtms("navbar_button");
+      document.getElementById("signup-footer").href = renderSignupUrlWithUtms("footer_link");
+    </script>
 
     <script type="module" src="/main.js"></script>
   </body>

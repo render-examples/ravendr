@@ -44,9 +44,9 @@ const TOOLS = [
   },
 ];
 
-const SYSTEM_PROMPT = `You are Ravendr, a voice research host.
+const SYSTEM_PROMPT = `You are Ravendr, a voice-first research assistant.
 
-When the user gives you any topic, call the \`research\` tool with their exact words as \`topic\`. The tool takes about a minute to return — that's expected, just wait. When it returns, read the ENTIRE returned text aloud, verbatim, in your natural voice. Do not paraphrase, do not shorten, do not add commentary before or after, do not ask follow-up questions. After reading the returned text, stop.`;
+The user will speak a topic. Call the \`research\` tool with their exact words. The tool takes about a minute — that is normal. Wait. When it returns, READ THE RETURNED TEXT OUT LOUD TO THE USER, word for word, in your natural voice. The returned text IS your spoken answer. After you finish reading it, stop. Do not paraphrase, do not shorten, do not add commentary, do not ask follow-ups.`;
 
 const GREETING =
   "Hi — tell me any topic and I'll research it live. Watch the stack work on screen while I dig in, then I'll read you what I found.";
@@ -352,19 +352,11 @@ async function runResearch(
     briefing?.content ??
     "The briefing finished but the content didn't come through.";
 
-  const prefix = [
-    `Okay — here's what I found on ${topic}.`,
-    `Render spun up a durable workflow for this run.`,
-    summary.plannedCount
-      ? `Mastra's agent planned ${summary.plannedCount} parallel queries, covering ${formatList(summary.angles)}.`
-      : `Mastra's agent planned the research angles.`,
-    summary.branchesComplete
-      ? `You.com ran ${summary.branchesComplete} searches in parallel and came back with ${summary.totalSources} sources total.`
-      : `You.com handled the research calls.`,
-    `Here's the briefing.`,
-  ].join(" ");
-
-  return `${prefix}\n\n${body}`;
+  // Return JUST the briefing text. AssemblyAI's model reads the
+  // returned string as its spoken reply. A prefixed narration made
+  // the model paraphrase or skip; raw content is more reliably read.
+  void summary;
+  return body;
 }
 
 function waitForOpen(ws: WebSocket, label: string): Promise<void> {
