@@ -443,6 +443,27 @@
         flex-shrink: 0;
       }
       .line .msg { flex: 1; line-height: 1.5; color: var(--text); }
+      .line .cat {
+        font-size: 0.55rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        padding: 1px 5px;
+        border: 1px solid currentColor;
+        font-weight: 600;
+        margin-right: 0.4rem;
+        flex-shrink: 0;
+        align-self: flex-start;
+        margin-top: 2px;
+        font-family: "Inter", sans-serif;
+        font-variant-numeric: tabular-nums;
+      }
+      .line .cat-event    { color: var(--amber); }
+      .line .cat-message  { color: var(--text-dim); }
+      .line .cat-thinking { color: var(--render-purple); }
+      .line .cat-step     { color: var(--cyan); }
+      .line .cat-action   { color: var(--render-purple); }
+      .line .cat-complete { color: var(--green); }
+      .line .cat-error    { color: var(--red); }
       .line .count {
         font-size: 0.65rem;
         padding: 0 0.35rem;

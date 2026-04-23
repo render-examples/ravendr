@@ -66,6 +66,32 @@ const KIND_CLASS = {
   "briefing.ready": "kind-briefing",
 };
 
+// Category pill for each event kind — matches gradient-bang's HUD feel.
+// event=amber, message=dim, thinking=purple, step=cyan, action=purple,
+// complete=green, error=red.
+const KIND_CATEGORY = {
+  "session.started": "step",
+  "workflow.dispatched": "action",
+  "workflow.started": "action",
+  "workflow.completed": "complete",
+  "workflow.failed": "error",
+  "ask.classified": "message",
+  "agent.planning": "thinking",
+  "plan.ready": "event",
+  "agent.synthesizing": "thinking",
+  "verify.started": "message",
+  "verify.passed": "complete",
+  "verify.failed": "event",
+  "research.retrying": "message",
+  "youcom.call.started": "event",
+  "youcom.call.completed": "event",
+  "briefing.ready": "complete",
+};
+
+function categoryOf(kind) {
+  return KIND_CATEGORY[kind] || "event";
+}
+
 let active = false;
 let stopCapture = null;
 let ws = null;
@@ -93,10 +119,11 @@ function chatBubble(role, text, mode) {
   return el;
 }
 
-function log(line, event) {
+function log(line, event, options = {}) {
   clearEmptyState();
   const kindClass = event?.kind ? KIND_CLASS[event.kind] ?? "" : "";
   const kind = event?.kind ?? "";
+  const category = options.category || categoryOf(kind);
 
   // Stack consecutive same-kind events. E.g. five youcom.call.started
   // firing nearly-simultaneously collapse into one line with "× 5".
@@ -123,10 +150,19 @@ function log(line, event) {
   el.dataset.kind = kind;
   el.dataset.count = "1";
   const stamp = new Date(event?.at ?? Date.now()).toLocaleTimeString();
-  el.innerHTML = `<span class="indicator"></span><span class="stamp">${stamp}</span><span class="msg"></span>`;
+  el.innerHTML = `<span class="indicator"></span><span class="cat cat-${category}">${category}</span><span class="stamp">${stamp}</span><span class="msg"></span>`;
   el.querySelector(".msg").textContent = line;
   logEl.appendChild(el);
   logEl.scrollTop = logEl.scrollHeight;
+}
+
+/**
+ * Emits an interstitial MESSAGE line — "Reviewing latest results..." style.
+ * Bridges perceptual gaps between big phase events so the feed never feels
+ * stalled. Called by handleEvent on big transitions.
+ */
+function message(text) {
+  log(text, { at: Date.now(), kind: "ui.message" }, { category: "message" });
 }
 
 function handleTranscript(msg) {
@@ -161,6 +197,36 @@ function handleEvent(event) {
 
   const summary = summarize(event);
   if (summary) log(summary, event);
+
+  // Interstitial MESSAGE lines — gradient-bang-style "Reviewing latest
+  // results…" placeholders during long waits so the feed never stalls.
+  switch (event.kind) {
+    case "session.started":
+      message("Spinning up Render workflow…");
+      break;
+    case "ask.classified":
+      message(
+        `Routing through the ${event.shape}-shape pipeline…`
+      );
+      break;
+    case "plan.ready":
+      message(
+        `Fanning out ${event.queries.length} parallel research calls…`
+      );
+      break;
+    case "agent.synthesizing":
+      message("Reviewing latest results…");
+      break;
+    case "verify.started":
+      message("Checking briefing coverage against your ask…");
+      break;
+    case "verify.failed":
+      message("Gaps found — kicking off a retry with corrected plan…");
+      break;
+    case "briefing.ready":
+      message("Briefing ready — handing to voice…");
+      break;
+  }
 
   if (event.kind === "session.started") {
     feedHeaderEl.classList.add("live");
