@@ -1,12 +1,8 @@
 import { task } from "@renderinc/sdk/workflows";
-import { Agent } from "@mastra/core/agent";
 import { loadWorkflowConfig } from "../../config.js";
 import { createPostgresEventBus } from "../event-bus.js";
-import {
-  addSources,
-  completeBriefing,
-  setSessionStatus,
-} from "../db.js";
+import { addSources, completeBriefing, setSessionStatus } from "../db.js";
+import { synthesizerAgent } from "../../mastra/agents.js";
 import type { BranchResult } from "./search-branch.js";
 
 export interface SynthesizeResult {
@@ -15,23 +11,6 @@ export interface SynthesizeResult {
   content: string;
 }
 
-const SYNTH_INSTRUCTIONS = `You synthesize spoken briefings for Ravendr.
-
-You receive a topic and N research branches (each an angle + its findings).
-Weave them into one spoken briefing.
-
-Rules:
-- Open with a surprising, specific fact in the first sentence. No "In this briefing…" openers.
-- 3-5 short paragraphs. No bullet lists. No markdown headers.
-- Natural speech, the way a podcast host would talk.
-- Keep inline citation markers like [1, 2] — they'll be stripped for audio but surface as source cards.
-- Aim for under 4 minutes spoken (~600 words).
-- End with a one-sentence takeaway.`;
-
-/**
- * Render Workflow leaf task: writes the spoken briefing from branches,
- * persists it + sources, emits briefing.ready.
- */
 export const synthesize = task(
   {
     name: "synthesize",
@@ -75,13 +54,7 @@ export const synthesize = task(
         `Synthesize the spoken briefing now.`,
       ].join("\n");
 
-      const agent = new Agent({
-        id: "ravendr-synthesizer",
-        name: "ravendr-synthesizer",
-        instructions: SYNTH_INSTRUCTIONS,
-        model: normalizeModelId(config.ANTHROPIC_MODEL),
-      });
-
+      const agent = synthesizerAgent(config.ANTHROPIC_MODEL);
       const result = await agent.generate(prompt);
       const raw = (result as { text?: string }).text ?? "";
       const content = stripCitationMarkers(raw).trim();
@@ -100,11 +73,7 @@ export const synthesize = task(
         sourceCount: uniqueSources.length,
       });
 
-      return {
-        briefingId,
-        sourceCount: uniqueSources.length,
-        content,
-      };
+      return { briefingId, sourceCount: uniqueSources.length, content };
     } finally {
       await events.stop();
     }
@@ -130,8 +99,4 @@ function dedupeSources(
     out.push(s);
   }
   return out;
-}
-
-function normalizeModelId(model: string): string {
-  return model.includes("/") ? model : `anthropic/${model}`;
 }

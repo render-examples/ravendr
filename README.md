@@ -70,16 +70,31 @@ Web only: `RENDER_API_KEY`, `WORKFLOW_SLUG` (default `ravendr-workflow`).
 
 ## Repo layout
 
+One folder per vendor — each owns its protocol or SDK; the Render task files are thin orchestration glue that compose them.
+
 ```
 src/
-  server.ts routes.ts config.ts        web service
-  render/session-broker.ts              pairs /ws/client and /ws/task
-  render/tasks/voice-session.ts         ROOT: owns AssemblyAI + reverse WS
-  render/tasks/research.ts              orchestrates the subtasks below
-  render/tasks/plan-queries.ts          leaf — Mastra + Anthropic
-  render/tasks/search-branch.ts         leaf — You.com (× N parallel)
-  render/tasks/synthesize.ts            leaf — Mastra + Anthropic
-  youcom/research.ts                    You.com adapter
+  server.ts  routes.ts  config.ts      web service composition root
+  assemblyai/
+    voice-agent.ts                      AssemblyAI WebSocket protocol client
+  mastra/
+    agents.ts                           Planner, synthesizer, verifier factories
+  youcom/
+    research.ts                         You.com Research API adapter
+  render/
+    db.ts                               typed Postgres queries
+    event-bus.ts                        LISTEN/NOTIFY event bus
+    session-broker.ts                   pairs /ws/client with /ws/task
+    workflow-dispatcher.ts              @renderinc/sdk wrapper
+    tasks/
+      voice-session.ts                  ROOT task — holds AssemblyAI + reverse WS
+      research.ts                       orchestrates plan → search → synth → verify
+      plan-queries.ts                   uses mastra/agents.ts plannerAgent()
+      search-branch.ts                  uses youcom/research.ts (× N parallel)
+      synthesize.ts                     uses mastra/agents.ts synthesizerAgent()
+      verify.ts                         uses mastra/agents.ts verifierAgent()
+  shared/                               ports + events + envelope + errors + logger
+
 static/                                 vanilla ES modules (index.html + main.js + mic.js)
 ```
 

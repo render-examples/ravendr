@@ -1,9 +1,10 @@
 import { task } from "@renderinc/sdk/workflows";
-import { Agent } from "@mastra/core/agent";
+import { z } from "zod";
 import { loadWorkflowConfig } from "../../config.js";
 import { createPostgresEventBus } from "../event-bus.js";
 import { Tier } from "../../shared/events.js";
 import { logger } from "../../shared/logger.js";
+import { plannerAgent } from "../../mastra/agents.js";
 
 export interface PlannedQuery {
   query: string;
@@ -15,31 +16,6 @@ export interface PlanResult {
   queries: PlannedQuery[];
 }
 
-const PLAN_INSTRUCTIONS = `You plan research for Ravendr.
-
-Given a topic, return 3-5 DISTINCT queries that cover different angles
-(history, mechanism, key people, recent events, numerical data, contested
-claims). Balance depth and breadth.
-
-Tier guidance:
-- "lite" for quick factual lookups or recency checks
-- "standard" for substantive questions (default)
-- "deep" for genuinely complex or contested topics (use sparingly)
-
-Respond with ONLY valid JSON in this exact shape, no prose, no markdown fences:
-
-{
-  "queries": [
-    { "query": "<actual search query>", "tier": "lite|standard|deep", "angle": "<short label>" }
-  ]
-}`;
-
-/**
- * Render Workflow leaf task: plans research queries via Mastra Agent + Anthropic.
- *
- * This is its own task run so failures retry independently. The root
- * research task awaits this and gets the plan back.
- */
 export const plan_queries = task(
   {
     name: "plan_queries",
@@ -66,18 +42,12 @@ export const plan_queries = task(
         step: "decomposing_topic",
       });
 
-      const agent = new Agent({
-        id: "ravendr-planner",
-        name: "ravendr-planner",
-        instructions: PLAN_INSTRUCTIONS,
-        model: normalizeModelId(config.ANTHROPIC_MODEL),
-      });
+      const agent = plannerAgent(config.ANTHROPIC_MODEL);
+      const prompt = feedback
+        ? `Topic: "${topic}"\n\nThe previous attempt failed verification. Verifier feedback:\n${feedback}\n\nAdjust your plan — queries should target what was missed. JSON only.`
+        : `Topic: "${topic}"\n\nPlan the queries now. JSON only.`;
 
-      const userPrompt = feedback
-        ? `Topic: "${topic}"\n\nThe previous attempt failed verification. Verifier feedback:\n${feedback}\n\nAdjust your plan — the queries should target what was missed. Respond with JSON only.`
-        : `Topic: "${topic}"\n\nPlan the queries now. Respond with JSON only.`;
-
-      const result = await agent.generate(userPrompt);
+      const result = await agent.generate(prompt);
       const text = (result as { text?: string }).text ?? "";
       const plan = parsePlan(text, topic);
 
@@ -85,11 +55,7 @@ export const plan_queries = task(
         sessionId,
         at: Date.now(),
         kind: "plan.ready",
-        queries: plan.queries.map((q) => ({
-          query: q.query,
-          tier: q.tier,
-          angle: q.angle,
-        })),
+        queries: plan.queries,
       });
 
       return plan;
@@ -118,7 +84,10 @@ function parsePlan(text: string, topic: string): PlanResult {
     if (queries.length < 1) throw new Error("no valid queries");
     return { queries: queries.slice(0, 5) };
   } catch (err) {
-    logger.warn({ err, text: text.slice(0, 200) }, "plan parse failed — falling back");
+    logger.warn(
+      { err, text: text.slice(0, 200) },
+      "plan parse failed — using fallback"
+    );
     return {
       queries: [
         { query: `Comprehensive overview of: ${topic}`, tier: "standard", angle: "overview" },
@@ -127,8 +96,4 @@ function parsePlan(text: string, topic: string): PlanResult {
       ],
     };
   }
-}
-
-function normalizeModelId(model: string): string {
-  return model.includes("/") ? model : `anthropic/${model}`;
 }
