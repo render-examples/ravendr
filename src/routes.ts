@@ -39,12 +39,15 @@ export function buildRoutes(deps: RoutesDeps): Hono {
       const sessionId = session.id;
       const token = deps.broker.issueToken(sessionId);
 
-      // Prefer Render's auto-set public URL; fall back to PUBLIC_WEB_URL, then
-      // derive from the incoming request host (handy for local dev / previews).
+      // The browser is hitting us right now — its Host header is guaranteed
+      // to be the public URL the task also needs to reach. That's the most
+      // reliable source. Env vars are just a fallback.
       const publicWebUrl =
+        inferUrlFromRequest(c) ??
         process.env.RENDER_EXTERNAL_URL ??
         deps.publicWebUrl ??
-        inferUrlFromRequest(c);
+        `http://localhost:3000`;
+      logger.info({ publicWebUrl, sessionId }, "dispatching voiceSession");
 
       const runId = await deps.dispatcher.startVoiceSession(
         sessionId,
@@ -102,8 +105,9 @@ function respondError(c: Context, err: unknown) {
   return c.json(fail(appErr));
 }
 
-function inferUrlFromRequest(c: Context): string {
-  const host = c.req.header("host") ?? "localhost:3000";
+function inferUrlFromRequest(c: Context): string | null {
+  const host = c.req.header("host");
+  if (!host) return null;
   const proto =
     c.req.header("x-forwarded-proto") ??
     (host.startsWith("localhost") ? "http" : "https");

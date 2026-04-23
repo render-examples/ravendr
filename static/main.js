@@ -169,17 +169,41 @@ async function start() {
   briefingEl.classList.remove("show");
   pendingUserBubble = null;
 
-  const sessionId = await startSession();
+  const startResp = await fetch("/api/start", { method: "POST" }).then((r) => r.json());
+  if (startResp.error) {
+    setStatus(`Start failed: ${startResp.error.message}`);
+    active = false;
+    micEl.classList.remove("active");
+    return;
+  }
+  const sessionId = startResp.data.sessionId;
+  const runId = startResp.data.runId;
+  log(`workflow dispatched · ${runId}`);
+
+  // If the task doesn't connect back in 15s, surface a clear error with
+  // the runId so the user can jump straight to the Render task logs.
+  const connectTimer = setTimeout(() => {
+    setStatus(`Task ${runId} didn't connect back — check its Render workflow logs.`);
+    log(
+      `Task ${runId} didn't connect back within 15s. Open Render dashboard → ravendr-workflow → Runs → ${runId} for details.`
+    );
+  }, 15_000);
+
   closeEvents = openEventStream(sessionId, handleEvent);
   ws = openClientSocket(sessionId, {
-    onReady: () => setStatus("Listening — say a topic."),
+    onReady: () => {
+      clearTimeout(connectTimer);
+      setStatus("Listening — say a topic.");
+    },
     onAudio: (b64) => player.enqueue(b64),
     onTranscript: handleTranscript,
     onError: (msg) => {
+      clearTimeout(connectTimer);
       setStatus(`Voice error: ${msg}`);
       log(`error: ${msg}`);
     },
     onClose: () => {
+      clearTimeout(connectTimer);
       if (active) stop();
     },
   });
