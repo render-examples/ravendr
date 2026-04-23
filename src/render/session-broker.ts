@@ -23,10 +23,22 @@ interface Slot {
   clientWS: WSClient | null;
   taskWS: WSClient | null;
   /** Messages from client queued while task isn't connected yet. */
-  clientToTaskBuffer: RawData[];
+  clientToTaskBuffer: string[];
   /** Messages from task queued while client isn't connected yet. */
-  taskToClientBuffer: RawData[];
+  taskToClientBuffer: string[];
   createdAt: number;
+}
+
+/**
+ * Coerce any RawData to a UTF-8 string before forwarding. All our app
+ * messages are JSON strings — without this the ws library sends forwarded
+ * Buffers as binary frames, which the browser's JSON-only handler drops.
+ */
+function toText(raw: RawData): string {
+  if (typeof raw === "string") return raw;
+  if (Buffer.isBuffer(raw)) return raw.toString("utf-8");
+  if (Array.isArray(raw)) return Buffer.concat(raw).toString("utf-8");
+  return Buffer.from(raw as ArrayBuffer).toString("utf-8");
 }
 
 const TOKEN_BYTES = 16;
@@ -106,10 +118,11 @@ export function createSessionBroker(): SessionBroker {
       ws.on("message", (raw) => {
         const s = slots.get(sessionId);
         if (!s) return;
+        const text = toText(raw);
         if (s.taskWS?.readyState === OPEN) {
-          s.taskWS.send(raw);
+          s.taskWS.send(text);
         } else {
-          s.clientToTaskBuffer.push(raw);
+          s.clientToTaskBuffer.push(text);
         }
       });
       ws.on("close", () => cleanup(sessionId));
@@ -134,10 +147,11 @@ export function createSessionBroker(): SessionBroker {
       ws.on("message", (raw) => {
         const s = slots.get(sessionId);
         if (!s) return;
+        const text = toText(raw);
         if (s.clientWS?.readyState === OPEN) {
-          s.clientWS.send(raw);
+          s.clientWS.send(text);
         } else {
-          s.taskToClientBuffer.push(raw);
+          s.taskToClientBuffer.push(text);
         }
       });
       ws.on("close", () => cleanup(sessionId));
