@@ -16,7 +16,12 @@ async function main() {
   const dir = "migrations";
   const files = (await readdir(dir)).filter((f) => f.endsWith(".sql")).sort();
 
-  const client = new Client({ connectionString });
+  // Render external URLs require SSL; internal URLs accept it harmlessly.
+  // Self-signed certs on managed Postgres → rejectUnauthorized:false.
+  const client = new Client({
+    connectionString,
+    ssl: { rejectUnauthorized: false },
+  });
   await client.connect();
   try {
     for (const f of files) {
