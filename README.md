@@ -1,26 +1,24 @@
 <p align="center">
-  <img src="./static/images/og-image.svg" alt="Ravendr — voice-first research on the Render stack" width="720" />
+  <img src="./static/images/og-image.png" alt="Ravendr — voice-first research on the Render stack" width="720" />
 </p>
 
 <h1 align="center">Ravendr</h1>
 
 <p align="center">
-  <strong>Voice-first research demo on the Render stack.<br/>Tap the mic, say a topic, watch Render Workflows orchestrate the pipeline live.</strong>
+  <strong>Voice-first research demo on the Render stack.</strong><br/>
+  Tap the mic, say a topic, watch Render Workflows orchestrate the pipeline live.
 </p>
 
 <p align="center">
-  <a href="https://render.com/deploy?repo=https://github.com/ojusave/ravendr">
-    <img src="https://render.com/images/deploy-to-render-button.svg" alt="Deploy to Render" />
-  </a>
+  <a href="https://render.com/deploy?repo=https://github.com/ojusave/ravendr"><img src="https://render.com/images/deploy-to-render-button.svg" alt="Deploy to Render" height="32" /></a>
+  &nbsp;
+  <a href="https://render.com/register?utm_source=github&amp;utm_medium=referral&amp;utm_campaign=ojus_demos&amp;utm_content=readme_hero"><img src="https://img.shields.io/badge/Sign_up_on_Render-6c63ff?logo=render&logoColor=white&style=flat-square" alt="Sign up on Render" height="22" /></a>
 </p>
 
 <p align="center">
-  <a href="https://render.com/register?utm_source=github&utm_medium=referral&utm_campaign=ojus_demos&utm_content=readme_hero">
-    <img src="https://img.shields.io/badge/Sign%20up%20on%20Render-6c63ff?style=for-the-badge&logo=render&logoColor=white" alt="Sign up on Render" />
-  </a>
-  <a href="https://github.com/ojusave/ravendr/actions"><img src="https://img.shields.io/badge/node-%3E%3D22-339933?logo=node.js&logoColor=white" alt="Node 22+" /></a>
-  <a href="https://github.com/ojusave/ravendr/blob/main/package.json"><img src="https://img.shields.io/badge/typescript-strict-3178c6?logo=typescript&logoColor=white" alt="TypeScript strict" /></a>
-  <a href="https://github.com/ojusave/ravendr/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT" /></a>
+  <a href="https://github.com/ojusave/ravendr/blob/main/package.json"><img src="https://img.shields.io/badge/node-%E2%89%A522-339933?logo=node.js&logoColor=white&style=flat-square" alt="Node 22+" /></a>
+  <a href="https://github.com/ojusave/ravendr/blob/main/tsconfig.json"><img src="https://img.shields.io/badge/typescript-strict-3178c6?logo=typescript&logoColor=white&style=flat-square" alt="TypeScript strict" /></a>
+  <a href="https://github.com/ojusave/ravendr/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue?style=flat-square" alt="MIT" /></a>
 </p>
 
 ---
@@ -29,12 +27,14 @@ Ravendr is a voice-in, briefing-out research demo. You click the mic, say a topi
 
 ## The stack
 
+Ordered by who fires first when you click the mic:
+
 | | Platform | Role |
 |---|---|---|
-| <img src="https://www.assemblyai.com/favicon.ico" width="24" /> | **[AssemblyAI Voice Agent](https://www.assemblyai.com/docs/voice-agents/voice-agent-api)** | Speech-to-text, VAD, turn-taking, LLM routing, text-to-speech. One WebSocket, voice in, voice out. |
-| <img src="https://render.com/favicon.ico" width="24" /> | **[Render Workflows](https://render.com/docs/workflows)** | Durable orchestration. Every pipeline step is a separate task run with its own retry policy — if one branch fails, only that branch retries. |
-| <img src="https://mastra.ai/favicon.ico" width="24" /> | **[Mastra](https://mastra.ai/docs/agents/overview)** | Agent primitive with a built-in model router. We use it to plan queries and synthesize the briefing via `anthropic/claude-sonnet-4`. |
-| <img src="https://you.com/favicon.ico" width="24" /> | **[You.com Research API](https://you.com/docs/search/overview)** | Parallel web research with inline citations. One call per planned angle. |
+| <img src="./static/images/logos/render.svg" width="32" height="32" /> | **[Render Workflows](https://render.com/docs/workflows)** | Fires first. `POST /api/start` dispatches the root `voiceSession` task. Every pipeline step underneath is its own independently-retried task run. |
+| <img src="./static/images/logos/assemblyai.png" width="32" height="32" /> | **[AssemblyAI Voice Agent](https://www.assemblyai.com/docs/voice-agents/voice-agent-api)** | Lives **inside** the voiceSession task — the task opens the WebSocket. Handles STT, VAD, turn-taking, LLM routing, TTS. One WebSocket, voice in, voice out. |
+| <img src="./static/images/logos/mastra.png" width="32" height="32" /> | **[Mastra](https://mastra.ai/docs/agents/overview)** | Agent primitive with a built-in model router. Used inside `plan_queries` and `synthesize` subtasks to hit `anthropic/claude-sonnet-4`. |
+| <img src="./static/images/logos/youcom.png" width="32" height="32" /> | **[You.com Research API](https://you.com/docs/search/overview)** | One call per planned angle, parallelized via `Promise.all(search_branch × N)`. Returns cited snippets for Mastra to synthesize. |
 
 Every platform is load-bearing: you can't cleanly remove any of them without the demo falling apart.
 
