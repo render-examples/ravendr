@@ -21,9 +21,11 @@ const logEl = document.getElementById("log");
 const feedHeaderEl = document.getElementById("feed-header");
 const feedLabelEl = document.getElementById("feed-label");
 const briefingEl = document.getElementById("briefing");
+const briefingWrapEl = document.getElementById("briefing-wrap");
 const briefingTopic = document.getElementById("briefing-topic");
 const briefingBody = document.getElementById("briefing-body");
 const briefingSources = document.getElementById("briefing-sources");
+const sourcesCountEl = document.getElementById("sources-count");
 const ribbon = createRibbon(document.getElementById("ribbon"));
 
 function setMicActive(on) {
@@ -286,24 +288,47 @@ async function showBriefing(briefingId) {
   try {
     const { briefing, sources } = await fetchBriefing(briefingId);
     briefingTopic.textContent = briefing.topic;
-    // Briefing body is markdown (bold, numbered lists, sub-headers from
-    // the enumeration-shape synth). Render via marked.parse to get real
-    // HTML instead of raw asterisks + run-together list items.
     briefingBody.innerHTML = marked.parse(briefing.content ?? "");
+
+    // Sources on the right side, ChatGPT-style. Numbered so they match
+    // the inline [1, 2] citations in the briefing body.
     briefingSources.innerHTML = "";
-    for (const s of sources) {
+    sources.forEach((s, i) => {
       const row = document.createElement("div");
       row.className = "source";
-      row.innerHTML = `<a href="${s.url}" target="_blank" rel="noopener">${escape(s.title)}</a>${
-        s.snippet ? ` — <span style="color:var(--muted)">${escape(s.snippet.slice(0, 200))}</span>` : ""
-      }`;
+      const host = safeHost(s.url);
+      row.innerHTML = `
+        <span class="num">${i + 1}</span>
+        <div class="body">
+          <a href="${escapeAttr(s.url)}" target="_blank" rel="noopener">${escape(s.title)}</a>
+          ${s.snippet ? `<div class="snip">${escape(s.snippet.slice(0, 180))}</div>` : ""}
+          ${host ? `<div class="host">${escape(host)}</div>` : ""}
+        </div>
+      `;
       briefingSources.appendChild(row);
+    });
+    if (sourcesCountEl) {
+      sourcesCountEl.textContent = sources.length ? String(sources.length) : "";
     }
-    briefingEl.classList.add("show");
+    briefingWrapEl?.classList.add("show");
     setStatus("Briefing ready.");
   } catch (err) {
     setStatus(`Failed to load briefing: ${err.message}`);
   }
+}
+
+function safeHost(url) {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return "";
+  }
+}
+
+function escapeAttr(s) {
+  return String(s).replace(/[&<>"']/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])
+  );
 }
 
 function escape(s) {
@@ -322,6 +347,7 @@ async function start() {
   feedHeaderEl.classList.remove("live");
   feedLabelEl.textContent = "activity";
   briefingEl.classList.remove("show");
+  briefingWrapEl?.classList.remove("show");
   pendingUserBubble = null;
 
   const startResp = await fetch("/api/start", { method: "POST" }).then((r) => r.json());
