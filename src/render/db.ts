@@ -1,4 +1,5 @@
 import { Pool, type PoolClient } from "pg";
+import { randomBytes } from "node:crypto";
 import type { PhaseEvent } from "../shared/events.js";
 import type { ResearchSource } from "../shared/ports.js";
 import { AppError } from "../shared/errors.js";
@@ -29,6 +30,7 @@ export async function withClient<T>(
 // ─── sessions ───────────────────────────────────────────────────────
 export interface Session {
   id: string;
+  token: string | null;
   topic: string | null;
   createdAt: Date;
   status: "open" | "researching" | "complete" | "error";
@@ -37,32 +39,73 @@ export interface Session {
   closedAt: Date | null;
 }
 
+/** URL-safe random token, 16 chars. E.g. "a3f8k_2x9qP1-mYr". */
+function newToken(): string {
+  return randomBytes(12).toString("base64url");
+}
+
 export async function createSession(
   db: string,
   topic: string | null,
   lifetimeMinutes = 15
 ): Promise<Session> {
+  const token = newToken();
   return withClient(db, async (c) => {
     const res = await c.query<{
       id: string;
       created_at: Date;
       expires_at: Date;
     }>(
-      `INSERT INTO sessions (topic, status, expires_at)
-       VALUES ($1, 'open', now() + ($2 || ' minutes')::interval)
+      `INSERT INTO sessions (topic, status, token, expires_at)
+       VALUES ($1, 'open', $2, now() + ($3 || ' minutes')::interval)
        RETURNING id, created_at, expires_at`,
-      [topic, String(lifetimeMinutes)]
+      [topic, token, String(lifetimeMinutes)]
     );
     const row = res.rows[0];
     if (!row) throw new AppError("DB", "failed to create session");
     return {
       id: row.id,
+      token,
       topic,
       createdAt: row.created_at,
       status: "open",
       expiresAt: row.expires_at,
       taskRunId: null,
       closedAt: null,
+    };
+  });
+}
+
+export async function getSessionByToken(
+  db: string,
+  token: string
+): Promise<Session | null> {
+  return withClient(db, async (c) => {
+    const res = await c.query<{
+      id: string;
+      token: string;
+      topic: string | null;
+      status: Session["status"];
+      created_at: Date;
+      expires_at: Date | null;
+      task_run_id: string | null;
+      closed_at: Date | null;
+    }>(
+      `SELECT id, token, topic, status, created_at, expires_at, task_run_id, closed_at
+       FROM sessions WHERE token = $1`,
+      [token]
+    );
+    const row = res.rows[0];
+    if (!row) return null;
+    return {
+      id: row.id,
+      token: row.token,
+      topic: row.topic,
+      createdAt: row.created_at,
+      status: row.status,
+      expiresAt: row.expires_at,
+      taskRunId: row.task_run_id,
+      closedAt: row.closed_at,
     };
   });
 }
@@ -128,6 +171,7 @@ export async function getSession(
   return withClient(db, async (c) => {
     const res = await c.query<{
       id: string;
+      token: string | null;
       topic: string | null;
       status: Session["status"];
       created_at: Date;
@@ -135,7 +179,7 @@ export async function getSession(
       task_run_id: string | null;
       closed_at: Date | null;
     }>(
-      `SELECT id, topic, status, created_at, expires_at, task_run_id, closed_at
+      `SELECT id, token, topic, status, created_at, expires_at, task_run_id, closed_at
        FROM sessions WHERE id = $1`,
       [sessionId]
     );
@@ -143,6 +187,7 @@ export async function getSession(
     if (!row) return null;
     return {
       id: row.id,
+      token: row.token,
       topic: row.topic,
       createdAt: row.created_at,
       status: row.status,

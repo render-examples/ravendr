@@ -350,7 +350,15 @@ async function start() {
   briefingWrapEl?.classList.remove("show");
   pendingUserBubble = null;
 
-  const startResp = await fetch("/api/start", { method: "POST" }).then((r) => r.json());
+  // Pull the token from /s/{token} so the server can reuse the session
+  // that was minted on the landing redirect (instead of creating a new one).
+  const tokenFromPath = location.pathname.startsWith("/s/")
+    ? location.pathname.slice(3)
+    : "";
+  const startUrl = tokenFromPath
+    ? `/api/start?token=${encodeURIComponent(tokenFromPath)}`
+    : "/api/start";
+  const startResp = await fetch(startUrl, { method: "POST" }).then((r) => r.json());
   if (startResp.error) {
     const msg = startResp.error.message || "start failed";
     setStatus(

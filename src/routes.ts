@@ -10,6 +10,7 @@ import {
   createSession,
   getBriefing,
   getSession,
+  getSessionByToken,
   listSources,
   setSessionTaskRun,
 } from "./render/db.js";
@@ -39,9 +40,63 @@ export function buildRoutes(deps: RoutesDeps): Hono {
 
   app.get("/health", (c) => c.json({ ok: true, service: "ravendr-web" }));
 
-  // POST /api/start — create session, dispatch voiceSession task, return id.
+  // GET / — create a session + redirect to /s/{token}. llamaindex-style.
+  app.get("/", async (c) => {
+    try {
+      const session = await createSession(
+        deps.databaseUrl,
+        null,
+        deps.sessionLifetimeMinutes
+      );
+      return c.redirect(`/s/${session.token}`, 302);
+    } catch (err) {
+      logger.error({ err }, "failed to create landing session");
+      return c.text("Failed to create session", 500);
+    }
+  });
+
+  // GET /s/:token — serve the app, validate token. Expired or unknown
+  // tokens bounce back to / to spawn a fresh session.
+  app.get(
+    "/s/:token",
+    async (c, next) => {
+      const token = c.req.param("token");
+      const session = await getSessionByToken(deps.databaseUrl, token);
+      const expired =
+        !session ||
+        session.closedAt !== null ||
+        (session.expiresAt !== null && session.expiresAt.getTime() < Date.now());
+      if (expired) return c.redirect("/", 302);
+      c.header("Cache-Control", "no-store");
+      await next();
+    },
+    serveStatic({ path: "./static/index.html" })
+  );
+
+  // Session metadata for the frontend (countdown, status).
+  app.get("/api/sessions/by-token/:token", async (c) => {
+    const token = c.req.param("token");
+    const session = await getSessionByToken(deps.databaseUrl, token);
+    if (!session) throw new AppError("NOT_FOUND", "session not found");
+    return c.json(
+      ok({
+        sessionId: session.id,
+        token: session.token,
+        status: session.status,
+        expiresAt: session.expiresAt?.toISOString(),
+        closedAt: session.closedAt?.toISOString(),
+        lifetimeMinutes: deps.sessionLifetimeMinutes,
+      })
+    );
+  });
+
+  // POST /api/start — dispatches voiceSession for the current token's
+  // session. Creates a new session only if no valid token is given
+  // (backward compat).
   app.post("/api/start", async (c) => {
     try {
+      const requestedToken = c.req.query("token");
+
       // Concurrent-session cap. Returns 503 if at capacity — frontend shows
       // a "demo is busy, try again shortly" message instead of a dead
       // "Connecting…" state that would happen if we oversubscribed.
@@ -62,12 +117,23 @@ export function buildRoutes(deps: RoutesDeps): Hono {
         );
       }
 
-      const session = await createSession(
-        deps.databaseUrl,
-        null,
-        deps.sessionLifetimeMinutes
-      );
-      const sessionId = session.id;
+      let session = requestedToken
+        ? await getSessionByToken(deps.databaseUrl, requestedToken)
+        : null;
+      const tokenStillValid =
+        session &&
+        !session.closedAt &&
+        (!session.expiresAt || session.expiresAt.getTime() > Date.now()) &&
+        !session.taskRunId;
+
+      if (!tokenStillValid) {
+        session = await createSession(
+          deps.databaseUrl,
+          null,
+          deps.sessionLifetimeMinutes
+        );
+      }
+      const sessionId = session!.id;
       const token = deps.broker.issueToken(sessionId);
 
       // The browser is hitting us right now — its Host header is guaranteed
@@ -91,7 +157,7 @@ export function buildRoutes(deps: RoutesDeps): Hono {
         ok({
           sessionId,
           runId,
-          expiresAt: session.expiresAt?.toISOString(),
+          expiresAt: session!.expiresAt?.toISOString(),
           lifetimeMinutes: deps.sessionLifetimeMinutes,
         })
       );
@@ -151,8 +217,8 @@ export function buildRoutes(deps: RoutesDeps): Hono {
     }
   });
 
-  // Static frontend.
-  app.get("/", serveStatic({ path: "./static/index.html" }));
+  // Static assets (JS, CSS, images). `/` is handled above as a redirect
+  // to /s/{token}, so we don't mount index.html at the root here.
   app.use("/*", serveStatic({ root: "./static" }));
 
   return app;
