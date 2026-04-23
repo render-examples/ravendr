@@ -494,9 +494,68 @@
       .briefing .body {
         font-size: 0.875rem;
         line-height: 1.7;
-        white-space: pre-wrap;
         color: var(--text);
         margin-bottom: 1rem;
+      }
+      .briefing .body > * { margin-bottom: 0.75rem; }
+      .briefing .body > *:last-child { margin-bottom: 0; }
+      .briefing .body p { line-height: 1.7; }
+      .briefing .body strong { color: var(--text-strong); font-weight: 600; }
+      .briefing .body em { font-style: italic; color: var(--text-strong); }
+      .briefing .body h1,
+      .briefing .body h2,
+      .briefing .body h3,
+      .briefing .body h4 {
+        font-family: "Roboto", sans-serif;
+        font-weight: 300;
+        color: var(--text-strong);
+        margin-top: 1.25rem;
+      }
+      .briefing .body h1 { font-size: 1.25rem; }
+      .briefing .body h2 { font-size: 1.125rem; }
+      .briefing .body h3 { font-size: 1rem; font-weight: 500; }
+      .briefing .body h4 { font-size: 0.9375rem; font-weight: 500; }
+      .briefing .body ul,
+      .briefing .body ol {
+        padding-left: 1.5rem;
+        line-height: 1.7;
+      }
+      .briefing .body ol li,
+      .briefing .body ul li {
+        margin-bottom: 0.5rem;
+      }
+      .briefing .body ol li::marker {
+        color: var(--render-purple);
+        font-weight: 600;
+      }
+      .briefing .body ul li::marker {
+        color: var(--text-dim);
+      }
+      .briefing .body code {
+        font-family: "JetBrains Mono", monospace;
+        font-size: 0.8125rem;
+        background: var(--overlay-subtle);
+        padding: 1px 5px;
+        border: 1px solid var(--border);
+      }
+      .briefing .body pre {
+        font-family: "JetBrains Mono", monospace;
+        font-size: 0.8125rem;
+        background: var(--overlay-subtle);
+        padding: 0.75rem 1rem;
+        border: 1px solid var(--border);
+        overflow-x: auto;
+      }
+      .briefing .body blockquote {
+        padding-left: 0.875rem;
+        border-left: 2px solid var(--render-purple);
+        color: var(--text-muted);
+        font-style: italic;
+      }
+      .briefing .body a {
+        color: var(--render-purple);
+        text-decoration: underline;
+        text-underline-offset: 2px;
       }
       .sources {
         padding-top: 0.75rem;

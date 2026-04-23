@@ -8,6 +8,9 @@ import {
 } from "/api-client.js";
 import { startCapture, createPlayer } from "/mic.js";
 import { createRibbon } from "/chain-ribbon.js";
+import { marked } from "https://esm.sh/marked@14";
+
+marked.setOptions({ breaks: true, gfm: true });
 
 const micEl = document.getElementById("mic");
 const orbWrapEl = document.getElementById("orbWrap");
@@ -269,7 +272,10 @@ async function showBriefing(briefingId) {
   try {
     const { briefing, sources } = await fetchBriefing(briefingId);
     briefingTopic.textContent = briefing.topic;
-    briefingBody.textContent = briefing.content ?? "";
+    // Briefing body is markdown (bold, numbered lists, sub-headers from
+    // the enumeration-shape synth). Render via marked.parse to get real
+    // HTML instead of raw asterisks + run-together list items.
+    briefingBody.innerHTML = marked.parse(briefing.content ?? "");
     briefingSources.innerHTML = "";
     for (const s of sources) {
       const row = document.createElement("div");
