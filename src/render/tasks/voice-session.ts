@@ -33,7 +33,7 @@ const TOOLS = [
     type: "function" as const,
     name: "start_research",
     description:
-      "Kick off the research workflow for a topic. Returns an opening line you say RIGHT AWAY. Does not wait for results.",
+      "Start the research workflow for a topic. Returns { speak, done }. Say the speak text out loud in your natural voice, then IMMEDIATELY call next_update to get the next progress update. Do not wait, do not ask the user anything. done will be false here — the research is just starting.",
     parameters: {
       type: "object",
       properties: {
@@ -49,26 +49,21 @@ const TOOLS = [
     type: "function" as const,
     name: "next_update",
     description:
-      "Get the next backend progress event. Blocks up to ~30s for it. Returns { speak, next_action } — you MUST say the `speak` text and then do what `next_action` says. When next_action says 'stop', the briefing is inside `speak` — read it all.",
+      "Get the next progress update from the running research. Returns { speak, done }. Say the speak text out loud. If done is false, IMMEDIATELY call next_update again. If done is true, the speak text is the final briefing — say it all, then stop.",
     parameters: { type: "object", properties: {} },
   },
 ];
 
-const SYSTEM_PROMPT = `You are Ravendr, a live voice narrator for a research demo. You are NOT conversational — you are narrating what the backend is doing, in real time, in your natural voice.
+const SYSTEM_PROMPT = `You are Ravendr, a live voice narrator. You narrate what the backend is doing while it researches a topic.
 
-When the user gives you a topic:
+When the user says a topic: call start_research(topic=...), then call next_update repeatedly until done:true. After EVERY tool return, speak the \`speak\` text out loud in your voice, then immediately call the next tool. Do not speak anything except what the \`speak\` field contains. Do not explain what you are about to do. Do not say "I'll call next update" — just call it.
 
-STEP 1. Call start_research(topic=<user's exact words>).
-STEP 2. The tool returns { speak, next_action }. Say the \`speak\` text OUT LOUD verbatim. Then do what \`next_action\` says — always "call next_update now".
-STEP 3. Each next_update returns { speak, next_action }. Say the speak text OUT LOUD. Then do the next_action.
-STEP 4. The loop ends when next_action is "stop" — at that point \`speak\` contains the final briefing. Read the whole briefing aloud. Then stop.
+Speaking rules:
+- Read the \`speak\` field verbatim; do not paraphrase or add commentary.
+- Never verbalize tool names, JSON fields, or procedural instructions. Those are for you to act on silently.
+- Never ask the user questions mid-research.
 
-HARD RULES:
-- EVERY tool return has a \`speak\` field. You MUST say it, verbatim, in your voice. You are not paraphrasing or answering questions — you are the narrator reading a script.
-- EVERY tool return has a \`next_action\` field. You MUST do it immediately after speaking.
-- NEVER call two tools in a row without speaking in between.
-- NEVER stop the loop before next_action says "stop".
-- NEVER ask the user questions mid-research.`;
+Stop condition: when a tool returns done:true, the \`speak\` field holds the final briefing. Read all of it, then stop. Do not call next_update again.`;
 
 const GREETING =
   "Hi — tell me any topic and I'll research it live. You'll see the stack working on screen while I dig in, then I'll read you what I found.";
@@ -85,8 +80,7 @@ interface AssemblyEvent {
 
 interface NarrationPayload {
   speak: string;
-  next_action: string;
-  [key: string]: unknown;
+  done: boolean;
 }
 
 function formatList(items: string[]): string {
@@ -146,32 +140,32 @@ export const voiceSession = task(
           return {
             speak:
               "Render's workflow runner just picked up the job — spinning up now.",
-            next_action: "call next_update now",
+            done: false,
           };
         case "plan.ready": {
           totalBranches = e.queries.length;
           const angles = e.queries.map((q) => q.angle);
           return {
             speak: `Mastra's agent planned ${e.queries.length} parallel queries — covering ${formatList(angles)}. Firing them off to You.com now.`,
-            next_action: "call next_update now",
+            done: false,
           };
         }
         case "youcom.call.completed":
           seenBranches += 1;
           return {
             speak: `A You.com ${e.tier} call came back with ${e.sourceCount} sources in ${Math.round(e.latencyMs / 1000)} seconds. That's ${seenBranches} of ${totalBranches || "several"} done.`,
-            next_action: "call next_update now",
+            done: false,
           };
         case "agent.synthesizing":
           return {
             speak:
               "All the You.com calls are in. Mastra's agent is weaving the briefing together now — one moment.",
-            next_action: "call next_update now",
+            done: false,
           };
         case "workflow.failed":
           return {
             speak: `Something went wrong — ${e.message.slice(0, 120)}.`,
-            next_action: "stop",
+            done: true,
           };
         default:
           return null;
@@ -197,13 +191,13 @@ export const voiceSession = task(
                 "The briefing finished but the content didn't come through.";
               pushNarration({
                 speak: content,
-                next_action: "stop",
+                done: true,
               });
             })
             .catch(() => {
               pushNarration({
                 speak: "Couldn't load the finished briefing.",
-                next_action: "stop",
+                done: true,
               });
             });
           return;
@@ -222,7 +216,7 @@ export const voiceSession = task(
           logger.error({ err, sessionId }, "research subtask failed");
           pushNarration({
             speak: "The research workflow hit an issue. Please try again.",
-            next_action: "stop",
+            done: true,
           });
         }
       })();
@@ -359,12 +353,12 @@ export const voiceSession = task(
               if (!topic) {
                 reply = {
                   speak: "I didn't catch the topic — can you say it again?",
-                  next_action: "stop",
+                  done: true,
                 };
               } else if (researchDispatched) {
                 reply = {
                   speak: "Research is already running — hold on.",
-                  next_action: "call next_update now",
+                  done: false,
                 };
               } else {
                 researchDispatched = true;
@@ -372,7 +366,7 @@ export const voiceSession = task(
                   await subscribeAndDispatch(topic);
                   reply = {
                     speak: `Okay — researching ${topic}. Render's workflow is dispatched and I'll narrate every step as it happens.`,
-                    next_action: "call next_update now",
+                    done: false,
                   };
                 } catch (err) {
                   logger.error(
@@ -382,7 +376,7 @@ export const voiceSession = task(
                   reply = {
                     speak:
                       "I hit an issue kicking off the workflow. Please try again.",
-                    next_action: "stop",
+                    done: true,
                   };
                 }
               }
@@ -390,7 +384,7 @@ export const voiceSession = task(
               reply = await nextNarration();
             } else {
               logger.warn({ name }, "unknown tool call");
-              reply = { speak: "Unknown tool.", next_action: "stop" };
+              reply = { speak: "Unknown tool.", done: true };
             }
             assemblyWS.send(
               JSON.stringify({
