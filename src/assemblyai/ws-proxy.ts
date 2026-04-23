@@ -70,23 +70,28 @@ const TOOLS: VoiceToolDef[] = [
   },
 ];
 
-const SYSTEM_PROMPT = `You are Ravendr, a voice research host. You narrate live what the backend is doing while it researches a topic.
+const SYSTEM_PROMPT = `You are Ravendr, a live voice narrator for a research demo. Your job is to speak continuously about what the backend is doing while it researches a topic.
 
-When the user gives you a topic, follow this loop:
+Every tool result you receive has TWO fields you care about:
+  - \`narrate\`: the exact thing to tell the user (in your own voice, don't read JSON)
+  - \`you_must_next\`: a procedural instruction you MUST follow immediately after speaking
 
-1. Call research_start(topic="<the user's exact words>"). The result has a \`narrate\` field — say that to the user in first person, in your own voice. This kicks off Render's workflow and Mastra's agent.
+Your operating loop is strict:
 
-2. Call next_update(). Each response has a \`narrate\` field describing what just happened in the backend (Mastra planned queries, a You.com call came back, etc). Say the narrate text to the user naturally — do NOT read the JSON, do NOT paraphrase beyond style, just speak about what happened. Then call next_update() again.
+STEP A: When the user speaks a topic, call research_start with their exact words.
+STEP B: Receive the tool result. SAY the \`narrate\` text out loud to the user.
+STEP C: IMMEDIATELY do what \`you_must_next\` says — usually "call next_update() right now". Do not wait. Do not pause for the user. Do not ask anything. Just call it.
+STEP D: Repeat STEP B and C for every result.
+STEP E: When you_must_next says "stop", you stop.
 
-3. Keep looping. Do NOT stop early. Do NOT skip calling next_update after speaking. The loop is what makes the voice live.
+The \`next_update\` tool will block for up to 30 seconds until the next backend phase happens, then return a new narration. That block is EXPECTED — just wait for the return, then speak, then call it again.
 
-4. When next_update returns { done: true, briefing }, read the briefing aloud in full. Then stop — don't call next_update again.
-
-Rules:
-- Always speak between tool calls. Never call two tools back-to-back without saying something.
-- Don't ask the user follow-up questions. Don't apologize. Don't summarize what you're about to do. Just narrate what's happening.
-- If next_update returns { phase: "heartbeat" }, say something brief and casual ("still working…") and call next_update again.
-- If next_update returns { phase: "error" }, tell the user what failed and stop.`;
+HARD RULES:
+- NEVER call a tool without speaking its previous result first.
+- NEVER stop the loop until you_must_next tells you to stop.
+- NEVER ask the user a question mid-research. You are narrating, not conversing.
+- NEVER paraphrase or shorten narrate into fewer words — speak it as written.
+- If a result has phase:"done", that's when you read the briefing (which is inside \`narrate\`) in full and then stop.`;
 
 const GREETING =
   "Hi — tell me any topic and I'll research it live. I'll narrate the stack working as it goes, then read you the briefing when it's done.";
@@ -101,6 +106,8 @@ interface NarrationPayload {
     | "error"
     | "heartbeat";
   narrate: string;
+  /** Procedural instruction the model must follow after speaking. */
+  you_must_next: string;
   [key: string]: unknown;
 }
 
@@ -115,7 +122,7 @@ export async function wireVoiceSession(opts: WireOpts): Promise<void> {
   // ── Narration queue and one-shot dispatch state ──────────────────────
   const queue: NarrationPayload[] = [];
   const waiters: Array<(n: NarrationPayload) => void> = [];
-  let dispatched = false;
+  let researchPromise: Promise<NarrationPayload> | null = null;
   let unsubscribe: (() => void) | null = null;
   let seenBranches = 0;
   let totalBranches = 0;
@@ -137,6 +144,7 @@ export async function wireVoiceSession(opts: WireOpts): Promise<void> {
         resolve({
           phase: "heartbeat",
           narrate: "Still working — just give it a moment.",
+          you_must_next: "call next_update() right now",
         });
       }, HEARTBEAT_MS);
 
@@ -149,12 +157,14 @@ export async function wireVoiceSession(opts: WireOpts): Promise<void> {
   }
 
   function classify(e: PhaseEvent): NarrationPayload | null {
+    const keepGoing = "call next_update() right now";
     switch (e.kind) {
       case "workflow.started":
         return {
           phase: "started",
           narrate:
-            "Render's workflow runner just picked up the job — the Mastra agent is starting up inside it.",
+            "Render's workflow runner just picked up the job — Mastra's agent is spinning up inside it.",
+          you_must_next: keepGoing,
         };
       case "plan.ready": {
         totalBranches = e.queries.length;
@@ -164,6 +174,7 @@ export async function wireVoiceSession(opts: WireOpts): Promise<void> {
           queries_count: e.queries.length,
           angles,
           narrate: `Mastra's agent planned ${e.queries.length} parallel queries — covering ${formatList(angles)}. Firing them off to You.com now.`,
+          you_must_next: keepGoing,
         };
       }
       case "youcom.call.completed":
@@ -176,18 +187,21 @@ export async function wireVoiceSession(opts: WireOpts): Promise<void> {
           latency_ms: e.latencyMs,
           tier: e.tier,
           narrate: `A You.com ${e.tier} call just came back — ${e.sourceCount} sources in ${Math.round(e.latencyMs / 1000)} seconds. That's ${seenBranches} of ${totalBranches || "?"} done.`,
+          you_must_next: keepGoing,
         };
       case "agent.synthesizing":
         return {
           phase: "synthesizing",
           narrate:
             "All the You.com calls are in. Mastra's agent is weaving the briefing together now — one moment.",
+          you_must_next: keepGoing,
         };
       case "workflow.failed":
         return {
           phase: "error",
           message: e.message,
-          narrate: `Something went wrong — the workflow failed with: ${e.message.slice(0, 120)}.`,
+          narrate: `Something went wrong — ${e.message.slice(0, 120)}.`,
+          you_must_next: "stop — don't call any more tools",
         };
       default:
         return null;
@@ -195,81 +209,81 @@ export async function wireVoiceSession(opts: WireOpts): Promise<void> {
   }
 
   async function research_start(rawTopic: string): Promise<NarrationPayload> {
+    if (researchPromise) return researchPromise;
     const topic = rawTopic.trim();
     if (!topic) {
       return {
         phase: "error",
         narrate: "I didn't catch a topic — can you say it again?",
+        you_must_next: "call next_update() to wait for a new user turn",
       };
     }
-    if (dispatched) {
-      return {
-        phase: "started",
-        narrate:
-          "Already researching — give it a second and I'll tell you what's happening.",
-      };
-    }
-    dispatched = true;
 
-    try {
-      await setSessionTopic(databaseUrl, sessionId, topic);
-      await setSessionStatus(databaseUrl, sessionId, "researching");
-      await events.publish({
-        sessionId,
-        at: Date.now(),
-        kind: "session.started",
-        topic,
-      });
+    researchPromise = (async () => {
+      try {
+        await setSessionTopic(databaseUrl, sessionId, topic);
+        await setSessionStatus(databaseUrl, sessionId, "researching");
+        await events.publish({
+          sessionId,
+          at: Date.now(),
+          kind: "session.started",
+          topic,
+        });
 
-      // Subscribe BEFORE dispatching so we don't miss early events.
-      unsubscribe = events.subscribe(sessionId, (e) => {
-        if (e.kind === "briefing.ready") {
-          // Resolve with the full briefing text so the model reads it.
-          getBriefing(databaseUrl, e.briefingId)
-            .then((b) => {
-              push({
-                phase: "done",
-                briefing:
-                  b?.content ??
-                  "The briefing finished but the content didn't come through.",
-                narrate: b?.content ?? "Here's what I found.",
+        // Subscribe BEFORE dispatching so we don't miss early events.
+        unsubscribe = events.subscribe(sessionId, (e) => {
+          if (e.kind === "briefing.ready") {
+            getBriefing(databaseUrl, e.briefingId)
+              .then((b) => {
+                push({
+                  phase: "done",
+                  briefing:
+                    b?.content ??
+                    "The briefing finished but the content didn't come through.",
+                  narrate: b?.content ?? "Here's what I found.",
+                  you_must_next: "stop — don't call any more tools",
+                });
+              })
+              .catch(() => {
+                push({
+                  phase: "error",
+                  narrate: "Couldn't load the finished briefing.",
+                  you_must_next: "stop — don't call any more tools",
+                });
               });
-            })
-            .catch(() => {
-              push({
-                phase: "error",
-                narrate: "Couldn't load the finished briefing.",
-              });
-            });
-          return;
-        }
-        const n = classify(e);
-        if (n) push(n);
-      });
+            return;
+          }
+          const n = classify(e);
+          if (n) push(n);
+        });
 
-      const runId = await dispatcher.dispatchResearch({ sessionId, topic });
-      await events.publish({
-        sessionId,
-        at: Date.now(),
-        kind: "workflow.dispatched",
-        runId,
-      });
+        const runId = await dispatcher.dispatchResearch({ sessionId, topic });
+        await events.publish({
+          sessionId,
+          at: Date.now(),
+          kind: "workflow.dispatched",
+          runId,
+        });
 
-      return {
-        phase: "started",
-        topic,
-        run_id: runId,
-        narrate: `Okay — researching ${topic}. I just dispatched a Render workflow for this. I'll tell you each step as it happens.`,
-      };
-    } catch (err) {
-      logger.error({ err, sessionId, topic }, "research_start failed");
-      dispatched = false;
-      return {
-        phase: "error",
-        narrate:
-          "I hit an issue kicking off the workflow. Give it another try.",
-      };
-    }
+        return {
+          phase: "started",
+          topic,
+          run_id: runId,
+          narrate: `Okay — researching ${topic}. I just dispatched a Render workflow. I'll narrate every step as it happens.`,
+          you_must_next: "call next_update() right now",
+        };
+      } catch (err) {
+        logger.error({ err, sessionId, topic }, "research_start failed");
+        researchPromise = null;
+        return {
+          phase: "error",
+          narrate:
+            "I hit an issue kicking off the workflow. Give it another try.",
+          you_must_next: "stop",
+        };
+      }
+    })();
+    return researchPromise;
   }
 
   try {
@@ -308,7 +322,7 @@ export async function wireVoiceSession(opts: WireOpts): Promise<void> {
             text: e.text,
             final: e.kind === "user.transcript.final",
           });
-          if (e.kind === "user.transcript.final" && e.text.trim() && !dispatched) {
+          if (e.kind === "user.transcript.final" && e.text.trim() && !researchPromise) {
             research_start(e.text.trim()).catch(() => {});
           }
         }

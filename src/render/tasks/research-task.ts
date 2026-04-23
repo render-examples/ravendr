@@ -17,7 +17,7 @@ export const research = task(
     name: "research",
     plan: "starter",
     timeoutSeconds: 400,
-    retry: { maxRetries: 1, waitDurationMs: 1_000, backoffScaling: 1.5 },
+    retry: { maxRetries: 0, waitDurationMs: 1_000, backoffScaling: 1.5 },
   },
   async function research(
     sessionId: string,

@@ -65,8 +65,15 @@ const INSTRUCTIONS = `You are Ravendr's researcher. Given a topic the user spoke
 
 Do not skip steps. Do not re-plan. Do not call tools you weren't told to call.`;
 
-export function createResearchAgent(deps: ResearchAgentDeps) {
+export interface ResearchAgentHandle {
+  agent: Agent;
+  /** Populated by write_briefing's execute — the runner reads this after generate() returns. */
+  getResult(): { briefingId: string; sourceCount: number } | null;
+}
+
+export function createResearchAgent(deps: ResearchAgentDeps): ResearchAgentHandle {
   const { events, research, databaseUrl, sessionId, briefingId } = deps;
+  let captured: { briefingId: string; sourceCount: number } | null = null;
 
   const planQueries = createTool({
     id: "plan_queries",
@@ -186,17 +193,20 @@ export function createResearchAgent(deps: ResearchAgentDeps) {
         sourceCount: uniqueSources.length,
       });
 
-      return { briefingId, sourceCount: uniqueSources.length };
+      captured = { briefingId, sourceCount: uniqueSources.length };
+      return captured;
     },
   });
 
-  return new Agent({
+  const agent = new Agent({
     id: `researcher-${sessionId}`,
     name: "Ravendr Researcher",
     instructions: INSTRUCTIONS,
     model: normalizeModelId(deps.anthropicModel),
     tools: { plan_queries: planQueries, search_web: searchWeb, write_briefing: writeBriefing },
   });
+
+  return { agent, getResult: () => captured };
 }
 
 function normalizeModelId(model: string): string {

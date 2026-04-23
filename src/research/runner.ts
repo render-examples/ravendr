@@ -21,9 +21,9 @@ export interface RunBriefingArgs {
 /**
  * Runs the Mastra Agent research loop inside a Render Workflow task.
  *
- * The agent autonomously calls plan_queries → search_web (parallel per
- * query) → write_briefing. Each tool publishes phase events that the voice
- * polling loop consumes for live narration.
+ * Success is measured by whether write_briefing's execute actually ran
+ * (captured via closure in the agent factory). We don't parse Mastra's
+ * generate() return shape — the tool's side effect is the source of truth.
  */
 export async function runBriefing(
   args: RunBriefingArgs,
@@ -38,7 +38,7 @@ export async function runBriefing(
     runId
   );
 
-  const agent = createResearchAgent({
+  const { agent, getResult } = createResearchAgent({
     research: ports.research,
     events: ports.events,
     databaseUrl: ports.databaseUrl,
@@ -48,22 +48,16 @@ export async function runBriefing(
   });
 
   try {
-    const result = await agent.generate(
-      `Research this topic for me: ${topic}`,
-      { maxSteps: 20 }
-    );
+    await agent.generate(`Research this topic for me: ${topic}`, {
+      maxSteps: 20,
+    });
 
-    // write_briefing is what persists and emits briefing.ready. If the agent
-    // didn't call it (misbehavior), fall back to whatever text it returned.
-    const writeBriefingResult = findWriteBriefingResult(result);
-    if (writeBriefingResult) {
-      return writeBriefingResult;
-    }
+    const result = getResult();
+    if (result) return result;
 
-    // Fallback: agent returned text without calling write_briefing.
     logger.warn(
       { sessionId, topic },
-      "agent skipped write_briefing — using free-form text"
+      "agent finished without calling write_briefing — no briefing persisted"
     );
     throw new Error("Agent did not call write_briefing");
   } catch (err) {
@@ -80,29 +74,4 @@ export async function runBriefing(
       .catch(() => {});
     throw AppError.from(err, "UPSTREAM_WORKFLOW");
   }
-}
-
-/**
- * Mastra's generate() result includes a `toolResults` array. Find the
- * write_briefing entry and return its output.
- */
-function findWriteBriefingResult(
-  result: unknown
-): { briefingId: string; sourceCount: number } | null {
-  const r = result as {
-    toolResults?: Array<{ toolName?: string; result?: unknown }>;
-  };
-  if (!Array.isArray(r?.toolResults)) return null;
-  for (const t of r.toolResults) {
-    if (t.toolName === "write_briefing") {
-      const out = t.result as { briefingId?: string; sourceCount?: number };
-      if (out?.briefingId) {
-        return {
-          briefingId: out.briefingId,
-          sourceCount: out.sourceCount ?? 0,
-        };
-      }
-    }
-  }
-  return null;
 }
