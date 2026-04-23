@@ -33,13 +33,9 @@ Respond ONLY with JSON in this exact shape. No prose, no markdown fences:
 
 {"shape": "<one of the five above>"}`;
 
-const PLAN_INSTRUCTIONS = `You plan research for Ravendr.
+const PLAN_BASE = `You plan research for Ravendr.
 
-Given a topic, return 3-5 DISTINCT queries that cover different angles
-(history, mechanism, key people, recent events, numerical data, contested
-claims). Balance depth and breadth.
-
-Tier guidance:
+Tier guidance (applies to every query):
 - "lite" for quick factual lookups or recency checks
 - "standard" for substantive questions (default)
 - "deep" for genuinely complex or contested topics (use sparingly)
@@ -51,6 +47,49 @@ Respond with ONLY valid JSON in this exact shape, no prose, no markdown fences:
     { "query": "<actual search query>", "tier": "lite|standard|deep", "angle": "<short label>" }
   ]
 }`;
+
+const PLAN_BY_SHAPE: Record<AskShape, string> = {
+  narrative: `${PLAN_BASE}
+
+ASK SHAPE: NARRATIVE. Return 3-5 DISTINCT queries covering different angles
+(history, mechanism, key people, recent events, numerical data, contested
+claims). Balance depth and breadth.`,
+
+  enumeration: `${PLAN_BASE}
+
+ASK SHAPE: ENUMERATION. The user wants a complete LIST of items. Use your
+knowledge of the domain to estimate how many items exist, and return ONE
+query per item (or per tight sub-group). Each query should name the specific
+item so the search result is about THAT item.
+
+Examples:
+- "every tribe in the Bible" → one query per tribe: "Reuben tribe Bible history",
+  "Simeon tribe Bible history", "Kenites Bible history", "Amalekites Bible history",
+  etc. Aim for 20-40 queries.
+- "every Fortune 500 tech company" → first include a seed query for the list,
+  then one per company (batch if >40 items).
+- "every tax change in 2024" → one query per distinct change.
+
+CAP: never return more than 40 queries. If the category has more items than
+that, group into ~40 sub-categories and return one query per sub-category.`,
+
+  comparison: `${PLAN_BASE}
+
+ASK SHAPE: COMPARISON. The user is weighing specific options. Return ONE
+query per option being compared (usually 2-6), plus optionally 1-2 queries on
+comparison criteria / rubric. Each query is laser-focused on ONE option.`,
+
+  specific: `${PLAN_BASE}
+
+ASK SHAPE: SPECIFIC. The user wants a direct answer. Return 1-3 tightly-scoped
+queries targeting exactly the fact(s) needed. No broad "overview" queries.`,
+
+  recent: `${PLAN_BASE}
+
+ASK SHAPE: RECENT. The user wants current events. Return 2-5 queries scoped to
+the last 12 months, covering different developments. Use "lite" tier for most;
+"standard" only if a specific development needs depth.`,
+};
 
 const SYNTH_NARRATIVE = `You synthesize spoken briefings for Ravendr.
 
@@ -158,11 +197,14 @@ export function classifierAgent(anthropicModel: string): Agent {
   });
 }
 
-export function plannerAgent(anthropicModel: string): Agent {
+export function plannerAgent(
+  anthropicModel: string,
+  shape: AskShape = "narrative"
+): Agent {
   return new Agent({
-    id: "ravendr-planner",
-    name: "ravendr-planner",
-    instructions: PLAN_INSTRUCTIONS,
+    id: `ravendr-planner-${shape}`,
+    name: `ravendr-planner-${shape}`,
+    instructions: PLAN_BY_SHAPE[shape],
     model: normalize(anthropicModel),
   });
 }

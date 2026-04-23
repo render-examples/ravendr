@@ -72,7 +72,7 @@ export const research = task(
       // NOT emitted until AFTER this loop settles, so the UI and voice agent
       // only ever see the final briefing.
       while (true) {
-        const plan = await plan_queries(sessionId, topic, feedback || undefined);
+        const plan = await plan_queries(sessionId, topic, feedback || undefined, shape);
 
         const branches: BranchResult[] = await Promise.all(
           plan.queries.map((q) =>

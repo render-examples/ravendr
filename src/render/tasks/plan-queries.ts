@@ -4,7 +4,9 @@ import { loadWorkflowConfig } from "../../config.js";
 import { createPostgresEventBus } from "../event-bus.js";
 import { Tier } from "../../shared/events.js";
 import { logger } from "../../shared/logger.js";
-import { plannerAgent } from "../../mastra/agents.js";
+import { plannerAgent, type AskShape } from "../../mastra/agents.js";
+
+const MAX_QUERIES = 40;
 
 export interface PlannedQuery {
   query: string;
@@ -26,7 +28,8 @@ export const plan_queries = task(
   async function plan_queries(
     sessionId: string,
     topic: string,
-    feedback?: string
+    feedback?: string,
+    shape: AskShape = "narrative"
   ): Promise<PlanResult> {
     const config = loadWorkflowConfig();
     const events = createPostgresEventBus({
@@ -42,7 +45,7 @@ export const plan_queries = task(
         step: "decomposing_topic",
       });
 
-      const agent = plannerAgent(config.ANTHROPIC_MODEL);
+      const agent = plannerAgent(config.ANTHROPIC_MODEL, shape);
       const prompt = feedback
         ? `Topic: "${topic}"\n\nThe previous attempt failed verification. Verifier feedback:\n${feedback}\n\nAdjust your plan — queries should target what was missed. JSON only.`
         : `Topic: "${topic}"\n\nPlan the queries now. JSON only.`;
@@ -82,7 +85,7 @@ function parsePlan(text: string, topic: string): PlanResult {
       if (query.length >= 4) queries.push({ query, tier, angle });
     }
     if (queries.length < 1) throw new Error("no valid queries");
-    return { queries: queries.slice(0, 5) };
+    return { queries: queries.slice(0, MAX_QUERIES) };
   } catch (err) {
     logger.warn(
       { err, text: text.slice(0, 200) },
