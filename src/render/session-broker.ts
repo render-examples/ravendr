@@ -1,4 +1,4 @@
-import type { WebSocket as WSClient } from "ws";
+import type { WebSocket as WSClient, RawData } from "ws";
 import { randomBytes } from "node:crypto";
 import { logger } from "../shared/logger.js";
 
@@ -7,8 +7,9 @@ import { logger } from "../shared/logger.js";
  * reverse WebSocket, by sessionId. Forwards every message byte-for-byte
  * in both directions. Zero business logic.
  *
- * The web service holds this map; both WS endpoints register here. When
- * both peers are connected for a sessionId, messages flow through.
+ * Handles the race where one side connects and starts sending before the
+ * other side registers: listeners are attached immediately on each
+ * registration, and inbound messages are buffered until the peer is up.
  */
 export interface SessionBroker {
   issueToken(sessionId: string): string;
@@ -21,21 +22,28 @@ interface Slot {
   token: string;
   clientWS: WSClient | null;
   taskWS: WSClient | null;
+  /** Messages from client queued while task isn't connected yet. */
+  clientToTaskBuffer: RawData[];
+  /** Messages from task queued while client isn't connected yet. */
+  taskToClientBuffer: RawData[];
   createdAt: number;
 }
 
 const TOKEN_BYTES = 16;
+const OPEN = 1; // ws.OPEN
 
 export function createSessionBroker(): SessionBroker {
   const slots = new Map<string, Slot>();
 
-  function ensure(sessionId: string, token?: string): Slot {
+  function ensure(sessionId: string): Slot {
     let slot = slots.get(sessionId);
     if (!slot) {
       slot = {
-        token: token ?? randomBytes(TOKEN_BYTES).toString("hex"),
+        token: randomBytes(TOKEN_BYTES).toString("hex"),
         clientWS: null,
         taskWS: null,
+        clientToTaskBuffer: [],
+        taskToClientBuffer: [],
         createdAt: Date.now(),
       };
       slots.set(sessionId, slot);
@@ -46,74 +54,99 @@ export function createSessionBroker(): SessionBroker {
   function cleanup(sessionId: string): void {
     const slot = slots.get(sessionId);
     if (!slot) return;
-    try {
-      slot.clientWS?.close();
-    } catch {
-      /* noop */
-    }
-    try {
-      slot.taskWS?.close();
-    } catch {
-      /* noop */
-    }
+    try { slot.clientWS?.close(); } catch { /* noop */ }
+    try { slot.taskWS?.close(); } catch { /* noop */ }
     slots.delete(sessionId);
-    logger.info({ sessionId, remaining: slots.size }, "broker: session cleaned up");
+    logger.info(
+      { sessionId, remaining: slots.size },
+      "broker: session cleaned up"
+    );
   }
 
-  function wirePipe(sessionId: string): void {
+  function flushBuffers(sessionId: string): void {
     const slot = slots.get(sessionId);
-    if (!slot || !slot.clientWS || !slot.taskWS) return;
-    const { clientWS, taskWS } = slot;
-    logger.info({ sessionId }, "broker: pipe ready");
-
-    clientWS.on("message", (raw) => {
-      if (taskWS.readyState === 1 /* OPEN */) taskWS.send(raw);
-    });
-    taskWS.on("message", (raw) => {
-      if (clientWS.readyState === 1 /* OPEN */) clientWS.send(raw);
-    });
-
-    const onAnyClose = () => cleanup(sessionId);
-    clientWS.on("close", onAnyClose);
-    clientWS.on("error", onAnyClose);
-    taskWS.on("close", onAnyClose);
-    taskWS.on("error", onAnyClose);
+    if (!slot) return;
+    if (slot.clientWS && slot.taskWS) {
+      if (slot.clientToTaskBuffer.length > 0) {
+        logger.info(
+          { sessionId, count: slot.clientToTaskBuffer.length },
+          "broker: flushing client→task buffer"
+        );
+        for (const m of slot.clientToTaskBuffer) {
+          if (slot.taskWS.readyState === OPEN) slot.taskWS.send(m);
+        }
+        slot.clientToTaskBuffer = [];
+      }
+      if (slot.taskToClientBuffer.length > 0) {
+        logger.info(
+          { sessionId, count: slot.taskToClientBuffer.length },
+          "broker: flushing task→client buffer"
+        );
+        for (const m of slot.taskToClientBuffer) {
+          if (slot.clientWS.readyState === OPEN) slot.clientWS.send(m);
+        }
+        slot.taskToClientBuffer = [];
+      }
+    }
   }
 
   return {
     issueToken(sessionId) {
-      const slot = ensure(sessionId);
-      return slot.token;
+      return ensure(sessionId).token;
     },
+
     registerClient(sessionId, ws) {
       const slot = ensure(sessionId);
       if (slot.clientWS) {
-        try {
-          slot.clientWS.close();
-        } catch {
-          /* noop */
-        }
+        try { slot.clientWS.close(); } catch { /* noop */ }
       }
       slot.clientWS = ws;
       logger.info({ sessionId }, "broker: client WS registered");
-      wirePipe(sessionId);
+
+      ws.on("message", (raw) => {
+        const s = slots.get(sessionId);
+        if (!s) return;
+        if (s.taskWS?.readyState === OPEN) {
+          s.taskWS.send(raw);
+        } else {
+          s.clientToTaskBuffer.push(raw);
+        }
+      });
+      ws.on("close", () => cleanup(sessionId));
+      ws.on("error", () => cleanup(sessionId));
+
+      flushBuffers(sessionId);
     },
+
     registerTask(sessionId, token, ws) {
       const slot = slots.get(sessionId);
       if (!slot || slot.token !== token) {
-        logger.warn({ sessionId }, "broker: task WS rejected (unknown/bad token)");
-        try {
-          ws.close();
-        } catch {
-          /* noop */
-        }
+        logger.warn(
+          { sessionId },
+          "broker: task WS rejected (unknown session or bad token)"
+        );
+        try { ws.close(); } catch { /* noop */ }
         return false;
       }
       slot.taskWS = ws;
       logger.info({ sessionId }, "broker: task WS registered");
-      wirePipe(sessionId);
+
+      ws.on("message", (raw) => {
+        const s = slots.get(sessionId);
+        if (!s) return;
+        if (s.clientWS?.readyState === OPEN) {
+          s.clientWS.send(raw);
+        } else {
+          s.taskToClientBuffer.push(raw);
+        }
+      });
+      ws.on("close", () => cleanup(sessionId));
+      ws.on("error", () => cleanup(sessionId));
+
+      flushBuffers(sessionId);
       return true;
     },
+
     size() {
       return slots.size;
     },
