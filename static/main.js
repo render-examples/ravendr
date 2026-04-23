@@ -10,6 +10,9 @@ import { startCapture, createPlayer } from "/mic.js";
 import { createRibbon } from "/chain-ribbon.js";
 
 const micEl = document.getElementById("mic");
+const orbWrapEl = document.getElementById("orbWrap");
+const iconMicEl = document.getElementById("iconMic");
+const iconStopEl = document.getElementById("iconStop");
 const statusEl = document.getElementById("status");
 const logEl = document.getElementById("log");
 const feedHeaderEl = document.getElementById("feed-header");
@@ -19,6 +22,16 @@ const briefingTopic = document.getElementById("briefing-topic");
 const briefingBody = document.getElementById("briefing-body");
 const briefingSources = document.getElementById("briefing-sources");
 const ribbon = createRibbon(document.getElementById("ribbon"));
+
+function setMicActive(on) {
+  orbWrapEl?.classList.toggle("active", on);
+  micEl?.classList.toggle("recording", on);
+  if (iconMicEl && iconStopEl) {
+    iconMicEl.style.display = on ? "none" : "block";
+    iconStopEl.style.display = on ? "block" : "none";
+  }
+  statusEl?.classList.toggle("active", on);
+}
 
 const KIND_CLASS = {
   "plan.ready": "kind-plan",
@@ -44,10 +57,16 @@ function setStatus(text) {
   statusEl.textContent = text;
 }
 
+function clearEmptyState() {
+  const empty = logEl.querySelector(".card-empty");
+  if (empty) empty.remove();
+}
+
 function chatBubble(role, text, mode) {
+  clearEmptyState();
   const el = document.createElement("div");
-  el.className = `line bubble-${role}`;
-  el.innerHTML = `<b>${role === "user" ? "you" : role}</b> · ${escape(text)}`;
+  el.className = `bubble ${role}`;
+  el.innerHTML = `<div class="who">${role === "user" ? "you" : "assistant"}</div><div class="text">${escape(text)}</div>`;
   if (mode === "pending") el.style.opacity = "0.6";
   logEl.appendChild(el);
   logEl.scrollTop = logEl.scrollHeight;
@@ -55,25 +74,25 @@ function chatBubble(role, text, mode) {
 }
 
 function log(line, event) {
+  clearEmptyState();
   const el = document.createElement("div");
   const kindClass = event?.kind ? KIND_CLASS[event.kind] ?? "" : "";
   el.className = `line ${kindClass}`.trim();
   const stamp = new Date(event?.at ?? Date.now()).toLocaleTimeString();
-  el.innerHTML = `<b>${stamp}</b> · ${line}`;
+  el.innerHTML = `<span class="stamp">${stamp}</span> · ${line}`;
   logEl.appendChild(el);
   logEl.scrollTop = logEl.scrollHeight;
 }
 
 function handleTranscript(msg) {
   if (msg.role === "assistant") {
-    // AssemblyAI already TTS'd this via reply.audio; just render the text.
     chatBubble("assistant", msg.text);
     return;
   }
   if (msg.role !== "user") return;
   if (msg.final) {
     if (pendingUserBubble) {
-      pendingUserBubble.innerHTML = `<b>you</b> · ${escape(msg.text)}`;
+      pendingUserBubble.querySelector(".text").textContent = msg.text;
       pendingUserBubble.style.opacity = "1";
       pendingUserBubble = null;
     } else {
@@ -83,7 +102,7 @@ function handleTranscript(msg) {
     if (!pendingUserBubble) {
       pendingUserBubble = chatBubble("user", msg.text, "pending");
     } else {
-      pendingUserBubble.innerHTML = `<b>you</b> · ${escape(msg.text)}`;
+      pendingUserBubble.querySelector(".text").textContent = msg.text;
     }
   }
 }
@@ -160,12 +179,12 @@ function escape(s) {
 async function start() {
   if (active) return;
   active = true;
-  micEl.classList.add("active");
+  setMicActive(true);
   setStatus("Connecting…");
   ribbon.reset();
   logEl.innerHTML = "";
   feedHeaderEl.classList.remove("live");
-  feedLabelEl.textContent = "activity feed";
+  feedLabelEl.textContent = "activity";
   briefingEl.classList.remove("show");
   pendingUserBubble = null;
 
@@ -173,7 +192,7 @@ async function start() {
   if (startResp.error) {
     setStatus(`Start failed: ${startResp.error.message}`);
     active = false;
-    micEl.classList.remove("active");
+    setMicActive(false);
     return;
   }
   const sessionId = startResp.data.sessionId;
@@ -222,7 +241,7 @@ async function start() {
 async function stop() {
   if (!active) return;
   active = false;
-  micEl.classList.remove("active");
+  setMicActive(false);
   setStatus("Stopped");
   stopCapture?.();
   ws?.close();
