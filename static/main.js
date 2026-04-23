@@ -12,11 +12,26 @@ import { createRibbon } from "/chain-ribbon.js";
 const micEl = document.getElementById("mic");
 const statusEl = document.getElementById("status");
 const logEl = document.getElementById("log");
+const feedHeaderEl = document.getElementById("feed-header");
+const feedLabelEl = document.getElementById("feed-label");
 const briefingEl = document.getElementById("briefing");
 const briefingTopic = document.getElementById("briefing-topic");
 const briefingBody = document.getElementById("briefing-body");
 const briefingSources = document.getElementById("briefing-sources");
 const ribbon = createRibbon(document.getElementById("ribbon"));
+
+const KIND_CLASS = {
+  "plan.ready": "kind-plan",
+  "agent.planning": "kind-plan",
+  "agent.synthesizing": "kind-plan",
+  "youcom.call.started": "kind-youcom",
+  "youcom.call.completed": "kind-youcom",
+  "workflow.dispatched": "kind-render",
+  "workflow.started": "kind-render",
+  "workflow.completed": "kind-render",
+  "workflow.failed": "kind-render",
+  "briefing.ready": "kind-briefing",
+};
 
 let active = false;
 let stopCapture = null;
@@ -41,7 +56,8 @@ function chatBubble(role, text, mode) {
 
 function log(line, event) {
   const el = document.createElement("div");
-  el.className = "line";
+  const kindClass = event?.kind ? KIND_CLASS[event.kind] ?? "" : "";
+  el.className = `line ${kindClass}`.trim();
   const stamp = new Date(event?.at ?? Date.now()).toLocaleTimeString();
   el.innerHTML = `<b>${stamp}</b> · ${line}`;
   logEl.appendChild(el);
@@ -82,9 +98,17 @@ function handleEvent(event) {
   const summary = summarize(event);
   if (summary) log(summary, event);
 
-  if (event.kind === "briefing.ready") {
+  if (event.kind === "session.started") {
+    feedHeaderEl.classList.add("live");
+    feedLabelEl.textContent = `researching · ${event.topic.slice(0, 48)}`;
+    setStatus("Researching — watch the stack work.");
+  } else if (event.kind === "briefing.ready") {
+    feedHeaderEl.classList.remove("live");
+    feedLabelEl.textContent = "research complete";
     showBriefing(event.briefingId);
   } else if (event.kind === "workflow.failed") {
+    feedHeaderEl.classList.remove("live");
+    feedLabelEl.textContent = "workflow failed";
     setStatus(`Error: ${event.message.slice(0, 80)}`);
   }
 }
@@ -140,6 +164,8 @@ async function start() {
   setStatus("Connecting…");
   ribbon.reset();
   logEl.innerHTML = "";
+  feedHeaderEl.classList.remove("live");
+  feedLabelEl.textContent = "activity feed";
   briefingEl.classList.remove("show");
   pendingUserBubble = null;
 

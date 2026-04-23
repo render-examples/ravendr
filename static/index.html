@@ -74,43 +74,68 @@
       .ribbon {
         display: grid; grid-template-columns: repeat(4, 1fr); gap: 0;
         background: var(--card); border: 1px solid var(--line);
-        border-radius: 8px; overflow: hidden;
-        width: 100%; max-width: 880px;
+        border-radius: 12px; overflow: hidden;
+        width: 100%; max-width: 960px;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.02);
       }
       .node {
-        padding: 20px 16px; position: relative;
+        padding: 24px 20px; position: relative;
         border-right: 1px solid var(--line);
-        display: flex; flex-direction: column; gap: 6px;
+        display: flex; flex-direction: column; gap: 8px;
         transition: background .2s ease;
       }
       .node:last-child { border-right: none; }
+      .node.active { background: color-mix(in oklab, currentColor 5%, transparent); }
       .node .dot {
-        width: 10px; height: 10px; border-radius: 50%;
+        width: 12px; height: 12px; border-radius: 50%;
         background: var(--line); transition: all .2s ease;
       }
-      .node.active .dot { background: currentColor; box-shadow: 0 0 0 4px color-mix(in oklab, currentColor 25%, transparent); animation: pulse 1.2s ease-in-out infinite; }
+      .node.active .dot { background: currentColor; box-shadow: 0 0 0 6px color-mix(in oklab, currentColor 25%, transparent); animation: pulse 1.2s ease-in-out infinite; }
       .node.done .dot { background: currentColor; }
-      @keyframes pulse { 50% { transform: scale(1.2); } }
-      .node .label { font-size: 12px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; }
-      .node .sub { font-size: 11px; color: var(--muted); font-family: "JetBrains Mono", monospace; min-height: 16px; }
+      @keyframes pulse { 50% { transform: scale(1.25); } }
+      .node .label { font-size: 13px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; }
+      .node .sub { font-size: 12px; color: var(--muted); font-family: "JetBrains Mono", monospace; min-height: 18px; }
       .node[data-lane="assembly"] { color: var(--assembly); }
       .node[data-lane="render"]   { color: var(--render); }
       .node[data-lane="mastra"]   { color: var(--mastra-accent); }
       .node[data-lane="youcom"]   { color: var(--you); }
 
-      /* Log panel */
-      .log {
-        width: 100%; max-width: 880px; margin-top: 16px;
-        border: 1px solid var(--line); border-radius: 8px; background: var(--card);
-        padding: 12px 16px; max-height: 180px; overflow: auto;
-        font-family: "JetBrains Mono", monospace; font-size: 12px;
+      /* Log panel — the star of the show while research is running */
+      .feed-header {
+        width: 100%; max-width: 960px; margin-top: 8px;
+        display: flex; align-items: center; gap: 10px;
+        font-size: 12px; color: var(--muted);
+        font-family: "JetBrains Mono", monospace;
+        text-transform: uppercase; letter-spacing: 0.08em;
       }
-      .log .line { color: var(--muted); padding: 2px 0; }
+      .feed-header .spinner {
+        width: 10px; height: 10px; border-radius: 50%;
+        background: var(--line);
+      }
+      .feed-header.live .spinner {
+        background: var(--render);
+        box-shadow: 0 0 0 4px color-mix(in oklab, var(--render) 25%, transparent);
+        animation: pulse 1.2s ease-in-out infinite;
+      }
+      .feed-header .rule { flex: 1; height: 1px; background: var(--line); }
+      .log {
+        width: 100%; max-width: 960px; margin-top: 8px;
+        border: 1px solid var(--line); border-radius: 12px; background: var(--card);
+        padding: 16px 20px; min-height: 220px; max-height: 360px; overflow: auto;
+        font-family: "JetBrains Mono", monospace; font-size: 13px;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+      }
+      .log .line { color: var(--muted); padding: 3px 0; animation: slideIn .24s ease-out; }
       .log .line b { color: var(--ink); font-weight: 600; }
-      .log .bubble-user { color: var(--ink); font-size: 13px; padding: 6px 0; }
+      .log .line.kind-plan b, .log .line.kind-plan { color: var(--mastra-accent); }
+      .log .line.kind-youcom b, .log .line.kind-youcom { color: var(--you); }
+      .log .line.kind-render b, .log .line.kind-render { color: var(--render); }
+      .log .line.kind-briefing { color: var(--ink); font-weight: 600; }
+      .log .bubble-user { color: var(--ink); font-size: 14px; padding: 8px 0; animation: slideIn .24s ease-out; }
       .log .bubble-user b { color: var(--render); text-transform: uppercase; font-size: 10px; letter-spacing: 0.06em; }
-      .log .bubble-assistant { color: var(--ink); font-size: 13px; padding: 6px 0; }
+      .log .bubble-assistant { color: var(--ink); font-size: 14px; padding: 8px 0; animation: slideIn .24s ease-out; }
       .log .bubble-assistant b { color: var(--mastra-accent); text-transform: uppercase; font-size: 10px; letter-spacing: 0.06em; }
+      @keyframes slideIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
 
       /* Briefing */
       .briefing {
@@ -139,7 +164,7 @@
       <main>
         <div style="text-align:center;">
           <h1>Ask me to research anything.</h1>
-          <p class="hint">Tap and say a topic. The stack will narrate itself as it runs.</p>
+          <p class="hint">Tap and say a topic. Watch the stack research it live — I'll read you the briefing when it's ready.</p>
         </div>
 
         <button id="mic" class="mic" aria-label="Start">
@@ -158,6 +183,11 @@
           <div class="node" data-lane="youcom"><div class="dot"></div><div class="label">You.com</div><div class="sub" data-field="sub">research</div></div>
         </div>
 
+        <div class="feed-header" id="feed-header">
+          <span class="spinner"></span>
+          <span id="feed-label">activity feed</span>
+          <span class="rule"></span>
+        </div>
         <div class="log" id="log"></div>
 
         <div class="briefing" id="briefing">

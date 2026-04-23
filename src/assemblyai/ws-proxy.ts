@@ -11,22 +11,26 @@ import {
   setSessionStatus,
   getBriefing,
 } from "../render/db.js";
-import { waitForEvent } from "../shared/wait-for-event.js";
 import { logger } from "../shared/logger.js";
 
 /**
- * Wires a browser WebSocket to an AssemblyAI VoiceSession.
+ * Bridges a browser WebSocket to an AssemblyAI VoiceSession.
  *
- * The agent is given FOUR tools it must call in order. Each returns a short
- * narration string it speaks aloud as the backend progresses:
+ * Architecture note — why a single tool:
+ *   AssemblyAI's Voice Agent has no server-initiated speech API. The agent
+ *   speaks only when *its* LLM decides to, typically after a tool return.
+ *   Chaining multiple tools with "speak between each" is unreliable — the
+ *   model either batches them in parallel or silently skips the verbalization.
  *
- *   start_research(topic)   → dispatches Render Workflow    → "Kicking off…"
- *   wait_for_plan()         → blocks on plan.ready          → "Mastra planned N queries…"
- *   wait_for_branches()     → blocks on all youcom.completed→ "All N calls back…"
- *   deliver_briefing()      → blocks on briefing.ready      → <full briefing>
+ *   So: ONE tool, `research(topic)`, blocks until the Render Workflow has
+ *   produced a briefing (~2 min), and returns a single narrated string
+ *   covering the whole run (what Render did, what Mastra planned, what
+ *   You.com fetched, the briefing itself). The model has one return to speak
+ *   and it speaks it.
  *
- * The system prompt is strict about calling all four, in order, with no
- * substitution. The chain-ribbon updates visually via SSE independently.
+ *   Real-time feedback during the wait comes from the visual chain ribbon +
+ *   activity log, wired via SSE at /api/sessions/:id/events. The UI is the
+ *   narration while the research runs; the voice is the payoff at the end.
  */
 export interface WireOpts {
   browser: BrowserWS;
@@ -40,58 +44,32 @@ export interface WireOpts {
 const TOOLS: VoiceToolDef[] = [
   {
     type: "function",
-    name: "start_research",
+    name: "research",
     description:
-      "STEP 1 of 4. Always call this first when the user gives any topic. Returns a short spoken acknowledgement. Must be followed by wait_for_plan.",
+      "Research a topic end-to-end. Blocks for up to a few minutes while the backend runs, then returns a narrated briefing the agent reads aloud verbatim.",
     parameters: {
       type: "object",
       properties: {
-        topic: { type: "string", description: "The user's topic, verbatim." },
+        topic: {
+          type: "string",
+          description: "The user's topic, verbatim.",
+        },
       },
       required: ["topic"],
     },
   },
-  {
-    type: "function",
-    name: "wait_for_plan",
-    description:
-      "STEP 2 of 4. Always call after start_research. Blocks until Mastra's planner finishes. Returns a short spoken line describing the research plan. Must be followed by wait_for_branches.",
-    parameters: { type: "object", properties: {} },
-  },
-  {
-    type: "function",
-    name: "wait_for_branches",
-    description:
-      "STEP 3 of 4. Always call after wait_for_plan. Blocks until all parallel You.com research calls return. Returns a short spoken summary. Must be followed by deliver_briefing.",
-    parameters: { type: "object", properties: {} },
-  },
-  {
-    type: "function",
-    name: "deliver_briefing",
-    description:
-      "STEP 4 of 4. Always call last. Returns the full spoken briefing (may be long). This is the final spoken content — do not call any more tools after this.",
-    parameters: { type: "object", properties: {} },
-  },
 ];
 
-const SYSTEM_PROMPT = `You are Ravendr, a voice host for a live research demo.
+const SYSTEM_PROMPT = `You are Ravendr, a voice research host.
 
-When the user gives ANY topic — even a greeting, even small-talk — you run a
-strict 4-step sequence. You never substitute your own content.
+When the user gives you a topic (any topic, even a greeting), you MUST call the \`research\` tool with their exact words as the \`topic\` argument. Do this immediately — do not ask follow-up questions.
 
-1. Call start_research with topic=<the user's words, verbatim>.
-2. Speak the tool's return value verbatim.
-3. IMMEDIATELY call wait_for_plan. Do NOT wait for new user input.
-4. Speak its return value verbatim.
-5. IMMEDIATELY call wait_for_branches.
-6. Speak its return value verbatim.
-7. IMMEDIATELY call deliver_briefing.
-8. Speak its return value verbatim. This is the final briefing — stop here.
+The \`research\` tool takes a minute or two to return. That is expected. When it returns, the result is a narrated briefing written in first person — YOU speak it out loud to the user, verbatim, in full. Do not paraphrase, summarize, or shorten it. Do not add commentary before or after. Just read the returned text as your spoken reply.
 
-Never skip a step. Never reorder. Never add your own commentary. Chain all
-four tool calls automatically — do not wait for the user between steps.`;
+After speaking the briefing, stop. Do not call the tool again unless the user asks for a new topic.`;
 
-const GREETING = "Hi — tell me any topic and I'll narrate the whole stack as it researches it.";
+const GREETING =
+  "Hi — tell me any topic and I'll research it live. You'll see the stack working on screen while I dig in, then I'll read you back what I found.";
 
 export async function wireVoiceSession(opts: WireOpts): Promise<void> {
   const { browser, sessionId, voice, events, dispatcher, databaseUrl } = opts;
@@ -99,155 +77,71 @@ export async function wireVoiceSession(opts: WireOpts): Promise<void> {
   let session: VoiceSession | null = null;
   const abort = new AbortController();
 
-  // ── Per-session state for tool handlers ──────────────────────────────
-  const state = {
-    topic: null as string | null,
-    runId: null as string | null,
-    plannedCount: 0,
-    branchesComplete: 0,
-    briefingText: null as string | null,
-  };
+  // Memoize: the agent may call `research` once, but we also fire it as a
+  // fallback from the first final user transcript. Both paths share one run.
+  let researchPromise: Promise<string> | null = null;
 
-  // Memoize handler work — agent might retry or call out of order.
-  let startResearchPromise: Promise<string> | null = null;
-  let waitForPlanPromise: Promise<string> | null = null;
-  let waitForBranchesPromise: Promise<string> | null = null;
-  let deliverBriefingPromise: Promise<string> | null = null;
+  async function research(rawTopic: string): Promise<string> {
+    if (researchPromise) return researchPromise;
+    researchPromise = (async () => {
+      const topic = rawTopic.trim();
+      if (!topic) return "I didn't catch a topic — can you say it again?";
 
-  async function startResearch(topic: string): Promise<string> {
-    if (startResearchPromise) return startResearchPromise;
-    startResearchPromise = (async () => {
-      const clean = topic.trim();
-      if (!clean) return "I didn't catch a topic — can you say it again?";
-      state.topic = clean;
+      // Collect phase data as events fly by so we can narrate in past tense.
+      const collected = {
+        runId: null as string | null,
+        plannedCount: 0,
+        angles: [] as string[],
+        branchesComplete: 0,
+        totalSources: 0,
+      };
+
+      const unsubscribe = events.subscribe(sessionId, (e) => {
+        if (e.kind === "plan.ready") {
+          collected.plannedCount = e.queries.length;
+          collected.angles = e.queries.map((q) => q.angle);
+        } else if (e.kind === "youcom.call.completed") {
+          collected.branchesComplete += 1;
+          collected.totalSources += e.sourceCount;
+        }
+      });
+
       try {
-        await setSessionTopic(databaseUrl, sessionId, clean);
+        await setSessionTopic(databaseUrl, sessionId, topic);
         await setSessionStatus(databaseUrl, sessionId, "researching");
         await events.publish({
           sessionId,
           at: Date.now(),
           kind: "session.started",
-          topic: clean,
+          topic,
         });
-        const runId = await dispatcher.dispatchResearch({ sessionId, topic: clean });
-        state.runId = runId;
+
+        const runId = await dispatcher.dispatchResearch({ sessionId, topic });
+        collected.runId = runId;
         await events.publish({
           sessionId,
           at: Date.now(),
           kind: "workflow.dispatched",
           runId,
         });
-        return `Okay, researching ${clean}. I've kicked off a Render workflow — instance spinning up. Now calling Mastra to plan the angles.`;
+
+        // Block until briefing.ready, with a wide timeout (workflow is slow).
+        const briefingEvent = await waitForBriefing(events, sessionId, 300_000);
+        const briefing = await getBriefing(databaseUrl, briefingEvent.briefingId);
+        const body =
+          briefing?.content ??
+          "I got the sources back but couldn't synthesize them cleanly — try again in a moment.";
+
+        return composeNarration(topic, collected, body);
       } catch (err) {
-        logger.error({ err, sessionId, topic: clean }, "start_research failed");
-        startResearchPromise = null;
-        return "I hit an issue kicking off the workflow. Try again in a moment.";
+        logger.error({ err, sessionId, topic }, "research tool failed");
+        researchPromise = null;
+        return "I hit an issue running the research workflow. Give it another try in a moment.";
+      } finally {
+        unsubscribe();
       }
     })();
-    return startResearchPromise;
-  }
-
-  async function waitForPlan(): Promise<string> {
-    if (waitForPlanPromise) return waitForPlanPromise;
-    waitForPlanPromise = (async () => {
-      if (!state.topic) return "Call start_research first.";
-      try {
-        const ev = await waitForEvent({
-          events,
-          sessionId,
-          kind: "plan.ready",
-          timeoutMs: 60_000,
-        });
-        state.plannedCount = ev.queries.length;
-        const angles = ev.queries.map((q) => q.angle).join(", ");
-        return `Mastra's researcher drafted ${ev.queries.length} parallel queries — covering ${angles}. Now calling You.com for each.`;
-      } catch (err) {
-        logger.warn({ err, sessionId }, "wait_for_plan failed");
-        waitForPlanPromise = null;
-        return "The planner hit an issue. Let me try to keep going.";
-      }
-    })();
-    return waitForPlanPromise;
-  }
-
-  async function waitForBranches(): Promise<string> {
-    if (waitForBranchesPromise) return waitForBranchesPromise;
-    waitForBranchesPromise = (async () => {
-      const expected = state.plannedCount || 1;
-      let totalSources = 0;
-      return new Promise<string>((resolve) => {
-        const timer = setTimeout(() => {
-          unsubscribe();
-          resolve(
-            `Still waiting on some research branches — let me move on with what we have.`
-          );
-        }, 180_000);
-
-        const unsubscribe = events.subscribe(sessionId, (e) => {
-          if (e.kind === "youcom.call.completed") {
-            state.branchesComplete += 1;
-            totalSources += e.sourceCount;
-            if (state.branchesComplete >= expected) {
-              clearTimeout(timer);
-              unsubscribe();
-              resolve(
-                `All ${state.branchesComplete} parallel calls are back — ${totalSources} sources total. Synthesizing the briefing now.`
-              );
-            }
-          } else if (e.kind === "workflow.failed") {
-            clearTimeout(timer);
-            unsubscribe();
-            resolve(
-              "Some research branches failed — I'll synthesize with what came back."
-            );
-          }
-        });
-      });
-    })();
-    return waitForBranchesPromise;
-  }
-
-  async function deliverBriefing(): Promise<string> {
-    if (deliverBriefingPromise) return deliverBriefingPromise;
-    deliverBriefingPromise = (async () => {
-      if (state.briefingText) return state.briefingText;
-      try {
-        const ev = await waitForEvent({
-          events,
-          sessionId,
-          kind: "briefing.ready",
-          timeoutMs: 300_000,
-        });
-        const briefing = await getBriefing(databaseUrl, ev.briefingId);
-        state.briefingText =
-          briefing?.content ?? "The briefing finished but returned no content.";
-        return state.briefingText;
-      } catch (err) {
-        logger.warn({ err, sessionId }, "deliver_briefing failed");
-        deliverBriefingPromise = null;
-        return "The briefing workflow didn't complete in time.";
-      }
-    })();
-    return deliverBriefingPromise;
-  }
-
-  async function handleToolCall(
-    name: string,
-    args: Record<string, unknown>
-  ): Promise<string> {
-    switch (name) {
-      case "start_research":
-        return startResearch(String(args.topic ?? ""));
-      case "wait_for_plan":
-        return waitForPlan();
-      case "wait_for_branches":
-        return waitForBranches();
-      case "deliver_briefing":
-        return deliverBriefing();
-      default:
-        logger.warn({ name }, "unknown tool call");
-        return "";
-    }
+    return researchPromise;
   }
 
   try {
@@ -256,8 +150,12 @@ export async function wireVoiceSession(opts: WireOpts): Promise<void> {
       systemPrompt: SYSTEM_PROMPT,
       greeting: GREETING,
       tools: TOOLS,
-      onUserTurn: async (topic) => startResearch(topic),
-      onToolCall: handleToolCall,
+      onUserTurn: (topic) => research(topic),
+      onToolCall: async (name, args) => {
+        if (name === "research") return research(String(args.topic ?? ""));
+        logger.warn({ name }, "unknown tool call");
+        return "";
+      },
       onEvent: (e) => {
         if (
           e.kind === "user.transcript.partial" ||
@@ -269,10 +167,11 @@ export async function wireVoiceSession(opts: WireOpts): Promise<void> {
             text: e.text,
             final: e.kind === "user.transcript.final",
           });
-          // Fallback: if the agent never calls start_research, fire it from
-          // the first final transcript.
+          // Fallback: if the model doesn't call `research` quickly, start the
+          // workflow ourselves from the first final transcript. Memoization
+          // in research() makes a later tool.call a no-op (returns same result).
           if (e.kind === "user.transcript.final" && e.text.trim()) {
-            startResearch(e.text.trim()).catch(() => {});
+            research(e.text.trim()).catch(() => {});
           }
         }
         if (e.kind === "agent.transcript") {
@@ -304,10 +203,6 @@ export async function wireVoiceSession(opts: WireOpts): Promise<void> {
     });
   });
 
-  // No phase-event forwarding here — the SSE route at /api/sessions/:id/events
-  // is the single source of truth for phase events → browser. Forwarding from
-  // both paths caused every event to render twice in the chat log.
-
   browser.on("message", (raw) => {
     const msg = parseJson(raw);
     if (!msg) return;
@@ -328,6 +223,59 @@ export async function wireVoiceSession(opts: WireOpts): Promise<void> {
   browser.on("error", cleanup);
 
   safeSend(browser, { type: "ready" });
+}
+
+function waitForBriefing(
+  events: EventBus,
+  sessionId: string,
+  timeoutMs: number
+): Promise<{ briefingId: string; sourceCount: number }> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      unsubscribe();
+      reject(new Error(`briefing.ready timeout after ${timeoutMs}ms`));
+    }, timeoutMs);
+    const unsubscribe = events.subscribe(sessionId, (e) => {
+      if (e.kind === "briefing.ready") {
+        clearTimeout(timer);
+        unsubscribe();
+        resolve({ briefingId: e.briefingId, sourceCount: e.sourceCount });
+      } else if (e.kind === "workflow.failed") {
+        clearTimeout(timer);
+        unsubscribe();
+        reject(new Error(`workflow.failed: ${e.message}`));
+      }
+    });
+  });
+}
+
+function composeNarration(
+  topic: string,
+  data: {
+    runId: string | null;
+    plannedCount: number;
+    angles: string[];
+    branchesComplete: number;
+    totalSources: number;
+  },
+  briefing: string
+): string {
+  const anglesList =
+    data.angles.length > 0
+      ? data.angles.slice(0, -1).join(", ") +
+        (data.angles.length > 1 ? ", and " : "") +
+        data.angles[data.angles.length - 1]
+      : "a few angles";
+
+  const prefix = [
+    `Okay — here's what I found on ${topic}.`,
+    `Render spun up a durable workflow to orchestrate this.`,
+    `Mastra's planner broke the topic into ${data.plannedCount || "a handful of"} angles — ${anglesList}.`,
+    `Then You.com ran ${data.branchesComplete || data.plannedCount || "those"} searches in parallel and came back with ${data.totalSources || "a stack of"} sources.`,
+    `Here's the briefing:`,
+  ].join(" ");
+
+  return `${prefix}\n\n${briefing}`;
 }
 
 function safeSend(ws: BrowserWS, payload: unknown): void {
