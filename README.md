@@ -1,6 +1,3 @@
-<p align="center">
-  <img src="./static/images/og-image.png" alt="Ravendr" width="720" />
-</p>
 
 <h1 align="center">Ravendr</h1>
 
