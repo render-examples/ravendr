@@ -1,6 +1,6 @@
 {
   "name": "ravendr",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "private": true,
   "type": "module",
   "engines": {
@@ -8,10 +8,12 @@
   },
   "scripts": {
     "dev": "tsx watch src/server.ts",
+    "dev:tasks": "tsx watch src/render/tasks/index.ts",
     "build": "tsc",
     "start": "node dist/server.js",
-    "tasks": "tsx src/render/workflows/index.ts",
-    "workflows": "npm run tasks"
+    "start:tasks": "node dist/render/tasks/index.js",
+    "migrate": "tsx scripts/migrate.ts",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
@@ -20,9 +22,9 @@
     "@mastra/memory": "^1.15.0",
     "@mastra/pg": "^1.9.1",
     "@renderinc/sdk": "^0.5.0",
-    "@youdotcom-oss/sdk": "0.13.1",
     "hono": "^4.0.0",
     "pg": "^8.13.0",
+    "pino": "^9.0.0",
     "ws": "^8.18.0",
     "zod": "^3.23.0"
   },

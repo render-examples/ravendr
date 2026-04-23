@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Ravendr — ask anything</title>
+    <link rel="icon" href="/images/render-mark.png" type="image/png" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --ink: #18181b;
+        --muted: #71717a;
+        --line: #e4e4e7;
+        --bg: #fafafa;
+        --card: #ffffff;
+        --render: #9333ea;
+        --mastra: #18181b;
+        --mastra-accent: #f97316;
+        --assembly: #22d3ee;
+        --you: #A78BFA;
+      }
+      * { box-sizing: border-box; }
+      html, body {
+        margin: 0; padding: 0;
+        background: var(--bg); color: var(--ink);
+        font-family: "Inter", -apple-system, sans-serif;
+        -webkit-font-smoothing: antialiased;
+      }
+      .shell {
+        min-height: 100vh;
+        display: grid; grid-template-rows: auto 1fr auto;
+        max-width: 1100px; margin: 0 auto;
+        padding: 24px;
+      }
+      header {
+        display: flex; align-items: center; gap: 10px;
+        font-weight: 600;
+      }
+      header img { width: 24px; height: 24px; }
+      header .tag {
+        font-size: 12px; color: var(--muted);
+        font-family: "JetBrains Mono", monospace;
+        border: 1px solid var(--line); padding: 2px 8px; border-radius: 999px;
+        margin-left: auto;
+      }
+      main {
+        display: flex; flex-direction: column; align-items: center;
+        justify-content: center; gap: 24px;
+      }
+      h1 {
+        font-size: 28px; font-weight: 500; letter-spacing: -0.01em;
+        margin: 0 0 4px;
+      }
+      .hint { color: var(--muted); font-size: 14px; margin: 0; }
+      .mic {
+        width: 140px; height: 140px; border-radius: 50%;
+        background: var(--card); border: 1.5px solid var(--line);
+        display: grid; place-items: center;
+        cursor: pointer; transition: all .18s ease;
+      }
+      .mic:hover { border-color: var(--render); }
+      .mic.active {
+        background: var(--render); border-color: var(--render);
+        box-shadow: 0 0 0 6px rgba(147, 51, 234, 0.12);
+      }
+      .mic svg { width: 56px; height: 56px; color: var(--ink); }
+      .mic.active svg { color: #fff; }
+      .status { font-size: 13px; color: var(--muted); font-family: "JetBrains Mono", monospace; min-height: 18px; }
+
+      /* Chain ribbon */
+      .ribbon {
+        display: grid; grid-template-columns: repeat(4, 1fr); gap: 0;
+        background: var(--card); border: 1px solid var(--line);
+        border-radius: 8px; overflow: hidden;
+        width: 100%; max-width: 880px;
+      }
+      .node {
+        padding: 20px 16px; position: relative;
+        border-right: 1px solid var(--line);
+        display: flex; flex-direction: column; gap: 6px;
+        transition: background .2s ease;
+      }
+      .node:last-child { border-right: none; }
+      .node .dot {
+        width: 10px; height: 10px; border-radius: 50%;
+        background: var(--line); transition: all .2s ease;
+      }
+      .node.active .dot { background: currentColor; box-shadow: 0 0 0 4px color-mix(in oklab, currentColor 25%, transparent); animation: pulse 1.2s ease-in-out infinite; }
+      .node.done .dot { background: currentColor; }
+      @keyframes pulse { 50% { transform: scale(1.2); } }
+      .node .label { font-size: 12px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; }
+      .node .sub { font-size: 11px; color: var(--muted); font-family: "JetBrains Mono", monospace; min-height: 16px; }
+      .node[data-lane="assembly"] { color: var(--assembly); }
+      .node[data-lane="render"]   { color: var(--render); }
+      .node[data-lane="mastra"]   { color: var(--mastra-accent); }
+      .node[data-lane="youcom"]   { color: var(--you); }
+
+      /* Log panel */
+      .log {
+        width: 100%; max-width: 880px; margin-top: 16px;
+        border: 1px solid var(--line); border-radius: 8px; background: var(--card);
+        padding: 12px 16px; max-height: 180px; overflow: auto;
+        font-family: "JetBrains Mono", monospace; font-size: 12px;
+      }
+      .log .line { color: var(--muted); padding: 2px 0; }
+      .log .line b { color: var(--ink); font-weight: 600; }
+
+      /* Briefing */
+      .briefing {
+        width: 100%; max-width: 880px; margin-top: 16px;
+        background: var(--card); border: 1px solid var(--line);
+        border-radius: 8px; padding: 20px; display: none;
+      }
+      .briefing.show { display: block; }
+      .briefing h2 { margin: 0 0 12px; font-size: 18px; font-weight: 600; }
+      .briefing pre { white-space: pre-wrap; font-family: inherit; font-size: 14px; line-height: 1.5; color: var(--ink); margin: 0 0 12px; }
+      .sources { display: grid; gap: 6px; }
+      .source { font-size: 13px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 6px; }
+      .source a { color: var(--render); text-decoration: none; }
+
+      footer { color: var(--muted); font-size: 12px; padding-top: 24px; text-align: center; }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <header>
+        <img src="/images/render-mark.png" alt="" />
+        <span>Ravendr</span>
+        <span class="tag">assembly · render · mastra · you.com</span>
+      </header>
+
+      <main>
+        <div style="text-align:center;">
+          <h1>Ask me to research anything.</h1>
+          <p class="hint">Tap and say a topic. The stack will narrate itself as it runs.</p>
+        </div>
+
+        <button id="mic" class="mic" aria-label="Start">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
+            <path d="M5 10v2a7 7 0 0 0 14 0v-2" />
+            <path d="M12 19v3" />
+          </svg>
+        </button>
+        <div class="status" id="status">Tap to start</div>
+
+        <div class="ribbon" id="ribbon">
+          <div class="node" data-lane="assembly"><div class="dot"></div><div class="label">AssemblyAI</div><div class="sub" data-field="sub">voice i/o</div></div>
+          <div class="node" data-lane="render"><div class="dot"></div><div class="label">Render Workflows</div><div class="sub" data-field="sub">durable compute</div></div>
+          <div class="node" data-lane="mastra"><div class="dot"></div><div class="label">Mastra</div><div class="sub" data-field="sub">agent + memory</div></div>
+          <div class="node" data-lane="youcom"><div class="dot"></div><div class="label">You.com</div><div class="sub" data-field="sub">research</div></div>
+        </div>
+
+        <div class="log" id="log"></div>
+
+        <div class="briefing" id="briefing">
+          <h2 id="briefing-topic"></h2>
+          <pre id="briefing-body"></pre>
+          <div class="sources" id="briefing-sources"></div>
+        </div>
+      </main>
+
+      <footer>ravendr — demo of voice-first research on the assembly · render · mastra · you.com stack</footer>
+    </div>
+    <script type="module" src="/main.js"></script>
+  </body>
+</html>

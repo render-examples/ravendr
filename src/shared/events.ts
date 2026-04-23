@@ -1,0 +1,70 @@
+import { z } from "zod";
+
+/**
+ * Phase events drive everything user-facing:
+ *   1. The frontend chain ribbon animates.
+ *   2. The narrator agent turns each event into one spoken line.
+ *
+ * Every event has a `sessionId` (scope) and `at` (ms timestamp). `kind` discriminates.
+ * Keep payloads small — these fly through Postgres NOTIFY (8kB hard limit).
+ */
+
+export const Tier = z.enum(["lite", "standard", "deep"]);
+export type Tier = z.infer<typeof Tier>;
+
+const base = { sessionId: z.string(), at: z.number() } as const;
+
+export const PhaseEventSchema = z.discriminatedUnion("kind", [
+  // ── session lifecycle ────────────────────────────────────────────
+  z.object({ ...base, kind: z.literal("session.started"), topic: z.string() }),
+  z.object({ ...base, kind: z.literal("session.ended") }),
+
+  // ── workflow lifecycle ────────────────────────────────────────────
+  z.object({ ...base, kind: z.literal("workflow.dispatched"), runId: z.string() }),
+  z.object({ ...base, kind: z.literal("workflow.started"), runId: z.string() }),
+  z.object({ ...base, kind: z.literal("workflow.completed"), runId: z.string(), briefingId: z.string() }),
+  z.object({ ...base, kind: z.literal("workflow.failed"), runId: z.string(), message: z.string() }),
+
+  // ── agent phases (inside workflow) ────────────────────────────────
+  z.object({ ...base, kind: z.literal("agent.planning"), step: z.enum(["decomposing_topic", "choosing_tier"]) }),
+  z.object({ ...base, kind: z.literal("agent.synthesizing") }),
+
+  // ── You.com ───────────────────────────────────────────────────────
+  z.object({ ...base, kind: z.literal("youcom.call.started"), query: z.string(), tier: Tier }),
+  z.object({
+    ...base,
+    kind: z.literal("youcom.call.completed"),
+    query: z.string(),
+    tier: Tier,
+    sourceCount: z.number(),
+    latencyMs: z.number(),
+  }),
+
+  // ── briefing payload is ready ─────────────────────────────────────
+  z.object({
+    ...base,
+    kind: z.literal("briefing.ready"),
+    briefingId: z.string(),
+    sourceCount: z.number(),
+  }),
+
+  // ── narrator (audit) ──────────────────────────────────────────────
+  z.object({ ...base, kind: z.literal("narrator.speech"), text: z.string() }),
+]);
+
+export type PhaseEvent = z.infer<typeof PhaseEventSchema>;
+export type PhaseEventKind = PhaseEvent["kind"];
+
+export function parsePhaseEvent(raw: unknown): PhaseEvent | null {
+  const parsed = PhaseEventSchema.safeParse(raw);
+  return parsed.success ? parsed.data : null;
+}
+
+/** Which vendor "lane" an event belongs to, for the frontend chain ribbon. */
+export function laneOf(kind: PhaseEventKind): "assembly" | "render" | "mastra" | "youcom" | "meta" {
+  if (kind === "narrator.speech") return "assembly";
+  if (kind.startsWith("workflow.") || kind === "briefing.ready") return "render";
+  if (kind.startsWith("agent.")) return "mastra";
+  if (kind.startsWith("youcom.")) return "youcom";
+  return "meta";
+}

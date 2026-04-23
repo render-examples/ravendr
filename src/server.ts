@@ -1,198 +1,117 @@
-import { Hono } from "hono";
-import { streamSSE } from "hono/streaming";
-import { getRequestListener } from "@hono/node-server";
-import { serveStatic } from "@hono/node-server/serve-static";
-import { createServer } from "http";
-import { WebSocketServer, WebSocket } from "ws";
-import { initDb } from "./render/postgres/db.js";
-import { createVoiceProxy } from "./assemblyai/proxy.js";
-import {
-  runIngestPipeline,
-  runRecallPipeline,
-  runReportPipeline,
-} from "./render/workflows/orchestrator.js";
-import { getRenderDashboardTasksUrl } from "./render/workflows/render-dashboard-url.js";
-import { createAppDeps } from "./composition.js";
-import { ok, fail } from "./shared/api-envelope.js";
+import { serve } from "@hono/node-server";
+import { WebSocketServer } from "ws";
+import { loadConfig } from "./config.js";
+import { logger } from "./shared/logger.js";
+import { buildRoutes } from "./routes.js";
+import { createAnthropicLLM } from "./anthropic/llm.js";
+import { createYouComResearch } from "./youcom/research.js";
+import { createAssemblyAIRuntime } from "./assemblyai/runtime.js";
+import { wireVoiceSession } from "./assemblyai/ws-proxy.js";
+import { createPostgresEventBus } from "./render/event-bus.js";
+import { createWorkflowDispatcher } from "./render/workflow-dispatcher.js";
+import { setSessionTopic, setSessionStatus } from "./render/db.js";
 
-const app = new Hono();
-const deps = createAppDeps();
-const PORT = parseInt(process.env.PORT ?? "3000", 10);
+/**
+ * Composition root. Wires ports to adapters, starts Hono + WebSocket upgrade,
+ * boots the Postgres LISTEN loop.
+ */
+async function main(): Promise<void> {
+  const config = loadConfig();
 
-function isTaskSuccess(status: string): boolean {
-  return status === "completed" || status === "succeeded";
-}
-
-app.get("/health", (c) => c.json(ok({ status: "ok", service: "ravendr-web" })));
-
-app.get("/api/config", (c) =>
-  c.json(ok({ dashboardTasksUrl: getRenderDashboardTasksUrl() }))
-);
-
-app.get("/api/workflows/recent", async (c) => {
-  try {
-    const runs = await deps.workflowRuns.listRecent(10);
-    return c.json(ok(runs));
-  } catch {
-    return c.json(fail("WORKFLOWS_FETCH_FAILED", "Failed to fetch workflows"), 500);
-  }
-});
-
-app.get("/api/knowledge", async (c) => {
-  try {
-    const entries = await deps.knowledge.getAll();
-    return c.json(ok(entries));
-  } catch {
-    return c.json(fail("KNOWLEDGE_FETCH_FAILED", "Failed to fetch knowledge"), 500);
-  }
-});
-
-app.get("/api/report/:taskRunId", async (c) => {
-  const { taskRunId } = c.req.param();
-  try {
-    const details = await deps.taskRuns.getTaskRun(taskRunId);
-    if (isTaskSuccess(details.status) && details.results.length > 0) {
-      return c.json(ok(details.results[0]));
-    }
-    return c.json(ok({ status: details.status }));
-  } catch {
-    return c.json(fail("TASK_RUN_NOT_FOUND", "Task run not found"), 404);
-  }
-});
-
-app.post("/api/pipeline/ingest", async (c) => {
-  c.header("X-Accel-Buffering", "no");
-  let body: { topic?: string; claim?: string };
-  try {
-    body = await c.req.json();
-  } catch {
-    return c.json(fail("INVALID_JSON", "Invalid JSON"), 400);
-  }
-  if (!body.topic?.trim() || !body.claim?.trim()) {
-    return c.json(fail("VALIDATION_ERROR", "topic and claim are required"), 400);
-  }
-  const signal = c.req.raw.signal;
-  return streamSSE(c, async (stream) => {
-    try {
-      for await (const chunk of runIngestPipeline(
-        body.topic!.trim(),
-        body.claim!.trim(),
-        signal
-      )) {
-        await stream.writeSSE({
-          event: chunk.event,
-          data: JSON.stringify(chunk.data),
-        });
-      }
-    } catch (e) {
-      if (e instanceof DOMException && e.name === "AbortError") {
-        await stream.writeSSE({
-          event: "error",
-          data: JSON.stringify({ message: "Request aborted" }),
-        });
-        return;
-      }
-      throw e;
-    }
+  const llm = createAnthropicLLM({
+    apiKey: config.ANTHROPIC_API_KEY,
+    model: config.ANTHROPIC_MODEL,
   });
-});
-
-app.post("/api/pipeline/recall", async (c) => {
-  c.header("X-Accel-Buffering", "no");
-  let body: { query?: string };
-  try {
-    body = await c.req.json();
-  } catch {
-    return c.json(fail("INVALID_JSON", "Invalid JSON"), 400);
-  }
-  if (!body.query?.trim()) {
-    return c.json(fail("VALIDATION_ERROR", "query is required"), 400);
-  }
-  const signal = c.req.raw.signal;
-  return streamSSE(c, async (stream) => {
-    try {
-      for await (const chunk of runRecallPipeline(body.query!.trim(), signal)) {
-        await stream.writeSSE({
-          event: chunk.event,
-          data: JSON.stringify(chunk.data),
-        });
-      }
-    } catch (e) {
-      if (e instanceof DOMException && e.name === "AbortError") {
-        await stream.writeSSE({
-          event: "error",
-          data: JSON.stringify({ message: "Request aborted" }),
-        });
-        return;
-      }
-      throw e;
-    }
+  const research = createYouComResearch({
+    apiKey: config.YOUCOM_API_KEY,
+    baseUrl: config.YOUCOM_BASE_URL,
   });
-});
-
-app.post("/api/pipeline/report", async (c) => {
-  c.header("X-Accel-Buffering", "no");
-  const signal = c.req.raw.signal;
-  return streamSSE(c, async (stream) => {
-    try {
-      for await (const chunk of runReportPipeline(signal)) {
-        await stream.writeSSE({
-          event: chunk.event,
-          data: JSON.stringify(chunk.data),
-        });
-      }
-    } catch (e) {
-      if (e instanceof DOMException && e.name === "AbortError") {
-        await stream.writeSSE({
-          event: "error",
-          data: JSON.stringify({ message: "Request aborted" }),
-        });
-        return;
-      }
-      throw e;
-    }
+  const voice = createAssemblyAIRuntime({
+    apiKey: config.ASSEMBLYAI_API_KEY,
+    agentUrl: config.ASSEMBLYAI_AGENT_URL,
+    voice: config.ASSEMBLYAI_VOICE,
   });
-});
+  const events = createPostgresEventBus({ connectionString: config.DATABASE_URL });
+  await events.start();
+  const dispatcher = createWorkflowDispatcher({
+    apiKey: config.RENDER_API_KEY,
+    workflowSlug: config.WORKFLOW_SLUG,
+  });
 
-app.use(
-  "/*",
-  serveStatic({
-    root: "./src/static",
-    rewriteRequestPath: (path) => {
-      if (path === "/") return "/index.html";
-      return path;
-    },
-  })
-);
+  const app = buildRoutes({
+    databaseUrl: config.DATABASE_URL,
+    events,
+    voice,
+    llm,
+    research,
+    dispatcher,
+  });
 
-async function start() {
-  try {
-    await initDb();
-    console.log("Database initialized");
-  } catch (err) {
-    console.warn("Database init skipped (will retry on first query):", (err as Error).message);
-  }
+  const server = serve(
+    { fetch: app.fetch, port: config.PORT },
+    (info) => logger.info({ port: info.port }, "ravendr-web listening")
+  );
 
-  const server = createServer(getRequestListener(app.fetch));
-
-  const voiceEnabled = process.env.ENABLE_VOICE_WEBSOCKET !== "false";
-  if (voiceEnabled) {
-    const wss = new WebSocketServer({ server, path: "/ws/voice" });
-    wss.on("connection", (clientWs: WebSocket) => {
-      console.log("Voice client connected");
-      createVoiceProxy(clientWs, (event) => {
-        const t = event.type as string;
-        if (t === "session.ready") console.log("Voice session ready");
-        if (t === "error") console.error("Voice error:", event.message);
-      });
+  // ── WebSocket upgrade for /ws ─────────────────────────────────────
+  const wss = new WebSocketServer({ noServer: true });
+  server.on("upgrade", (req, socket, head) => {
+    if (!req.url?.startsWith("/ws")) {
+      socket.destroy();
+      return;
+    }
+    const url = new URL(req.url, "http://x");
+    const sessionId = url.searchParams.get("sessionId");
+    if (!sessionId) {
+      socket.destroy();
+      return;
+    }
+    wss.handleUpgrade(req, socket, head, (ws) => {
+      wireVoiceSession({
+        browser: ws,
+        sessionId,
+        voice,
+        events,
+        onUserTurn: async (topic: string) => {
+          // User just spoke their topic. Dispatch the research workflow and
+          // return a short acknowledgment for AssemblyAI to speak.
+          try {
+            await setSessionTopic(config.DATABASE_URL, sessionId, topic);
+            await setSessionStatus(config.DATABASE_URL, sessionId, "researching");
+            await events.publish({
+              sessionId,
+              at: Date.now(),
+              kind: "session.started",
+              topic,
+            });
+            const runId = await dispatcher.dispatchResearch({ sessionId, topic });
+            await events.publish({
+              sessionId,
+              at: Date.now(),
+              kind: "workflow.dispatched",
+              runId,
+            });
+            return `Got it. Researching ${topic}. You'll hear updates as we go.`;
+          } catch (err) {
+            logger.error({ err, sessionId, topic }, "voice dispatch failed");
+            return "I hit an issue dispatching that research. Try again in a moment.";
+          }
+        },
+      }).catch((err) => logger.error({ err }, "wireVoiceSession failed"));
     });
-  } else {
-    console.warn("Voice WebSocket disabled (ENABLE_VOICE_WEBSOCKET=false)");
-  }
-
-  server.listen(PORT, "0.0.0.0", () => {
-    console.log(`Ravendr server listening on 0.0.0.0:${PORT}`);
   });
+
+  // ── graceful shutdown ─────────────────────────────────────────────
+  const shutdown = async () => {
+    logger.info("shutting down");
+    await events.stop();
+    server.close();
+    process.exit(0);
+  };
+  process.on("SIGINT", shutdown);
+  process.on("SIGTERM", shutdown);
 }
 
-start().catch(console.error);
+main().catch((err) => {
+  logger.fatal({ err }, "fatal during startup");
+  process.exit(1);
+});

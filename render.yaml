@@ -1,4 +1,10 @@
-# Standalone deploy for this repo. For the Samples monorepo, prefer /render.yaml at repository root.
+# Ravendr v2 — voice-first research demo on
+#   AssemblyAI (voice) · Render (compute + DB) · Mastra (agents) · You.com (research)
+#
+# The Workflow service (ravendr-tasks) is created manually in the Render
+# dashboard — Blueprint support for the workflow service type is evolving.
+# Its slug must match WORKFLOW_SLUG below and it runs `npm run start:tasks`.
+
 previews:
   generation: automatic
 
@@ -7,36 +13,55 @@ services:
     name: ravendr-web
     runtime: node
     plan: starter
+    healthCheckPath: /health
     buildCommand: npm ci && npm run build
     startCommand: node dist/server.js
-    healthCheckPath: /health
+    autoDeploy: true
     envVars:
-      - key: ASSEMBLYAI_API_KEY
-        displayName: AssemblyAI API Key
-        description: "Required: your AssemblyAI API key for the Voice Agent API. Get one at https://www.assemblyai.com/app"
-        required: true
-        sensitive: true
-        sync: false
-      - key: RENDER_API_KEY
-        displayName: Render API Key
-        description: "Required: your Render API key for triggering workflow tasks. Get one at https://render.com/docs/api#1-create-an-api-key"
-        required: true
-        sensitive: true
-        sync: false
+      - key: NODE_VERSION
+        value: "22"
       - key: WORKFLOW_SLUG
         displayName: Workflow slug
-        description: "Exact name of your Render Workflow service in the dashboard (e.g. ravendr-workflows). Task IDs look like <slug>/ingest."
-        required: true
-        sync: false
+        description: "Slug of your Render Workflow service (defaults to ravendr-tasks)."
+        value: ravendr-tasks
+      - key: RENDER_REGION
+        value: oregon
       - key: DATABASE_URL
         fromDatabase:
           name: ravendr-db
           property: connectionString
-      - key: ENABLE_VOICE_WEBSOCKET
-        value: "true"
-      - key: NODE_VERSION
-        value: "22"
+      - key: ANTHROPIC_API_KEY
+        displayName: Anthropic API key
+        description: "sk-ant-... from https://console.anthropic.com/"
+        sensitive: true
+        sync: false
+      - key: ANTHROPIC_MODEL
+        value: claude-sonnet-4-20250514
+      - key: YOUCOM_API_KEY
+        displayName: You.com API key
+        description: "From https://you.com/platform"
+        sensitive: true
+        sync: false
+      - key: YOUCOM_BASE_URL
+        value: https://api.you.com/v1
+      - key: ASSEMBLYAI_API_KEY
+        displayName: AssemblyAI API key
+        description: "From https://www.assemblyai.com/app"
+        sensitive: true
+        sync: false
+      - key: ASSEMBLYAI_AGENT_URL
+        value: wss://agents.assemblyai.com/v1/realtime
+      - key: ASSEMBLYAI_VOICE
+        value: claire
+      - key: RENDER_API_KEY
+        displayName: Render API key
+        description: "Used to dispatch workflow tasks. From https://dashboard.render.com/settings/api-keys"
+        sensitive: true
+        sync: false
+      - key: LOG_LEVEL
+        value: info
 
 databases:
   - name: ravendr-db
     plan: basic-256mb
+    postgresMajorVersion: "16"
