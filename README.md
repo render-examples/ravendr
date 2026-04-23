@@ -11,8 +11,6 @@
 
 <p align="center">
   <a href="https://render.com/deploy?repo=https://github.com/ojusave/ravendr"><img src="https://render.com/images/deploy-to-render-button.svg" alt="Deploy to Render" height="32" /></a>
-  &nbsp;
-  <a href="https://render.com/register?utm_source=github&amp;utm_medium=referral&amp;utm_campaign=ojus_demos&amp;utm_content=readme_hero"><img src="https://img.shields.io/badge/Sign_up_on_Render-6c63ff?logo=render&logoColor=white&style=flat-square" alt="Sign up on Render" height="22" /></a>
 </p>
 
 <p align="center">
