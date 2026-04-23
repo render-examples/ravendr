@@ -18,8 +18,8 @@ async function main(): Promise<void> {
   const config = loadConfig();
 
   const research = createYouComResearch({
-    apiKey: config.YOUCOM_API_KEY,
-    baseUrl: config.YOUCOM_BASE_URL,
+    apiKey: config.YOU_API_KEY,
+    baseUrl: config.YOU_BASE_URL,
   });
   const voice = createAssemblyAIRuntime({
     apiKey: config.ASSEMBLYAI_API_KEY,

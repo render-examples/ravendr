@@ -14,12 +14,12 @@ previews:
 envVarGroups:
   - name: ravendr-shared
     envVars:
-      - key: YOUCOM_API_KEY
+      - key: YOU_API_KEY
         displayName: You.com API key
         description: "From https://you.com/platform"
         sensitive: true
         sync: false
-      - key: YOUCOM_BASE_URL
+      - key: YOU_BASE_URL
         value: https://api.you.com/v1
       - key: LOG_LEVEL
         value: info

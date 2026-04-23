@@ -1,5 +1,5 @@
 import { task } from "@renderinc/sdk/workflows";
-import { loadConfig } from "../../config.js";
+import { loadWorkflowConfig } from "../../config.js";
 import { createYouComResearch } from "../../youcom/research.js";
 import { createPostgresEventBus } from "../event-bus.js";
 import { runBriefing } from "../../research/runner.js";
@@ -24,11 +24,11 @@ export const research = task(
     topic: string
   ): Promise<{ briefingId: string; sourceCount: number }> {
     logger.info({ sessionId, topic }, "research task start");
-    const config = loadConfig();
+    const config = loadWorkflowConfig();
 
     const yresearch = createYouComResearch({
-      apiKey: config.YOUCOM_API_KEY,
-      baseUrl: config.YOUCOM_BASE_URL,
+      apiKey: config.YOU_API_KEY,
+      baseUrl: config.YOU_BASE_URL,
     });
     const events = createPostgresEventBus({
       connectionString: config.DATABASE_URL,
