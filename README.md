@@ -22,7 +22,7 @@
 |---|---|---|
 | <img src="./static/images/logos/render.svg" width="28" /> | **[Render Workflows](https://render.com/docs/workflows)** | Orchestrator. `voiceSession` task owns the session; `plan_queries → search_branch × N → synthesize` are independently-retried subtasks. |
 | <img src="./static/images/logos/assemblyai.png" width="28" /> | **[AssemblyAI Voice Agent](https://www.assemblyai.com/docs/voice-agents/voice-agent-api)** | STT + VAD + LLM + TTS in one WebSocket. Lives inside the voiceSession task. |
-| <img src="./static/images/logos/mastra.png" width="28" /> | **[Mastra](https://mastra.ai/docs/agents/overview)** | Agent primitive. Plans queries and writes the briefing via `anthropic/claude-sonnet-4`. |
+| <img src="./static/images/logos/mastra.png" width="28" /> | **[Mastra](https://mastra.ai/docs/agents/overview)** | Agent primitive. Plans queries and writes the briefing using Anthropic **Sonnet 4** (see `ANTHROPIC_MODEL` in `src/config.ts`). |
 | <img src="./static/images/logos/youcom.png" width="28" /> | **[You.com Research](https://you.com/docs/search/overview)** | One call per planned angle, fanned out in parallel. |
 
 ## Architecture
