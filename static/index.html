@@ -132,7 +132,7 @@
         text-transform: uppercase;
         border: 1px solid var(--border);
       }
-      header .timer {
+      header .session-timer {
         font-size: 0.65rem;
         padding: 0.2rem 0.5rem;
         background: rgba(245, 158, 11, 0.1);
@@ -142,8 +142,8 @@
         font-variant-numeric: tabular-nums;
         display: none;
       }
-      header .timer.active { display: inline-flex; }
-      header .timer.expired {
+      header .session-timer.active { display: inline-flex; }
+      header .session-timer.expired {
         background: rgba(239, 68, 68, 0.1);
         color: var(--red);
         border-color: rgba(239, 68, 68, 0.3);
@@ -661,7 +661,7 @@
       }
       /* ── Footer ─────────────────────────────────────────── */
       footer {
-        padding: 0.625rem 1.25rem;
+        padding: 0.5rem 1.25rem;
         border-top: 1px solid var(--border);
         display: flex;
         align-items: center;
@@ -693,18 +693,11 @@
         <div class="dot"></div>
         <h1>Ravendr</h1>
         <span class="tag">Voice-first research · Render</span>
-        <span class="timer" id="session-timer">0:00</span>
+        <span class="session-timer" id="session-timer">0:00</span>
       </div>
       <div class="actions">
-        <a class="header-btn" href="https://github.com/ojusave/ravendr" target="_blank" rel="noopener">
-          <svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M12 .5a12 12 0 0 0-3.79 23.4c.6.11.82-.26.82-.58v-2.05c-3.34.72-4.04-1.6-4.04-1.6-.54-1.38-1.33-1.75-1.33-1.75-1.08-.74.08-.73.08-.73 1.2.08 1.83 1.23 1.83 1.23 1.07 1.83 2.8 1.3 3.49.99.1-.78.42-1.3.76-1.6-2.66-.3-5.46-1.33-5.46-5.93 0-1.31.47-2.38 1.23-3.22-.12-.3-.53-1.52.12-3.17 0 0 1-.32 3.3 1.23a11.49 11.49 0 0 1 6 0c2.3-1.55 3.3-1.23 3.3-1.23.65 1.65.24 2.87.12 3.17.77.84 1.23 1.91 1.23 3.22 0 4.61-2.8 5.62-5.48 5.92.43.37.81 1.1.81 2.22v3.29c0 .32.22.7.83.58A12 12 0 0 0 12 .5z"/></svg>
-          GitHub
-        </a>
         <a href="https://render.com/deploy?repo=https://github.com/ojusave/ravendr" target="_blank" rel="noopener" title="Deploy to Render">
           <img src="https://render.com/images/deploy-to-render-button.svg" alt="Deploy to Render" style="height:28px;vertical-align:middle" />
-        </a>
-        <a class="header-btn primary" id="signup-link" href="#" target="_blank" rel="noopener">
-          Sign up on Render
         </a>
         <button class="header-btn" onclick="toggleTheme()" title="Toggle theme" aria-label="Toggle theme">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2m0 18v2M4.22 4.22l1.42 1.42m12.73 12.73l1.42 1.42M1 12h2m18 0h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
@@ -717,6 +710,10 @@
         <div class="hero">
           <h2>Tap the orb, say a topic.</h2>
           <p>Render Workflows orchestrates AssemblyAI, Mastra, and You.com live — voice in, briefing out. Every step is a checkpointed task you can see fire on the ribbon below.</p>
+          <div style="background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);padding:0.75rem 1rem;margin:0.75rem auto 0;text-align:left;max-width:480px">
+            <p style="font-size:0.75rem;color:var(--red);font-weight:600;margin-bottom:0.25rem">Do not share sensitive or personal information</p>
+            <p style="font-size:0.7rem;color:var(--text-muted);line-height:1.5;margin:0">This is a public demo. While session data is deleted on expiry, voice and research content may be processed by third-party services. Use sample or non-sensitive topics only.</p>
+          </div>
         </div>
 
         <div class="orb-wrap" id="orbWrap">
@@ -770,15 +767,15 @@
     <footer>
       <span>Built with</span>
       <a href="https://render.com/docs/workflows" target="_blank" rel="noopener">Render Workflows</a>
-      <span class="sep">·</span>
+      <span class="sep">&middot;</span>
       <a href="https://www.assemblyai.com/docs/voice-agents/voice-agent-api" target="_blank" rel="noopener">AssemblyAI</a>
-      <span class="sep">·</span>
+      <span class="sep">&middot;</span>
       <a href="https://mastra.ai" target="_blank" rel="noopener">Mastra</a>
-      <span class="sep">·</span>
+      <span class="sep">&middot;</span>
       <a href="https://you.com" target="_blank" rel="noopener">You.com</a>
-      <span class="sep">·</span>
-      <a id="signup-footer" href="#" target="_blank" rel="noopener">Sign up on Render</a>
-      <span class="sep">·</span>
+      <span class="sep">&middot;</span>
+      <a id="signup-footer" href="#" target="_blank" rel="noopener">Render</a>
+      <span class="sep">&middot;</span>
       <a href="https://github.com/ojusave/ravendr" target="_blank" rel="noopener">GitHub</a>
     </footer>
 
@@ -796,9 +793,8 @@
           utm_campaign: "ojus_demos",
           utm_content: content || "footer_link",
         });
-        return "https://dashboard.render.com/register?" + params.toString();
+        return "https://render.com/register?" + params.toString();
       }
-      document.getElementById("signup-link").href = renderSignupUrlWithUtms("navbar_button");
       document.getElementById("signup-footer").href = renderSignupUrlWithUtms("footer_link");
     </script>
 
