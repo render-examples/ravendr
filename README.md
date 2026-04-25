@@ -22,6 +22,18 @@ Tap the mic and say a research topic. Anything works: "Tell me about the Battle 
 
 Behind the scenes the app classifies your ask, plans a fan-out of search queries, hits You.com in parallel, writes the briefing with Anthropic Sonnet, and verifies it for completeness. Every one of those steps runs as its own Render Workflow task that you can open in the dashboard, inspect, and replay.
 
+## Highlights
+
+| Feature | What it gets you |
+|---|---|
+| **Hard 60-second budget** | The pipeline ships whatever finished by the deadline (`racePartial`), so the demo never feels stuck. |
+| **Shape-aware research** | A classifier tags the ask (`narrative`, `enumeration`, `comparison`, `specific`, `recent`); the planner and synthesizer use shape-specific prompts. |
+| **Parallel fan-out** | Up to 40 search queries run against You.com in parallel for enumeration-heavy asks. |
+| **Verify + retry** | A verifier agent judges the briefing against the original ask and triggers one retry with feedback if it falls short. |
+| **Live progress feed** | Every phase event streams to the browser over Server-Sent Events, driving the activity log on screen. |
+| **Concurrency safety** | 100 concurrent sessions cap, 15-minute TTL, cleanup daemon cancels expired Workflow runs automatically. |
+| **Per-task observability** | Every stage shows up as its own Render Workflow run with logs, status, and one-click replay. |
+
 ## Stack
 
 | | Platform | Job |
@@ -91,28 +103,48 @@ const { taskRunId } = await render.workflows.startTask(
 
 `taskRunId` is the durable handle. The cleanup daemon hands it to `cancelTaskRun(taskRunId)` when a session expires.
 
+## Prerequisites
+
+| Account / Tool | Why |
+|---|---|
+| [Render](https://dashboard.render.com/register) | Hosts the web service, Postgres, and Workflow runner. |
+| [AssemblyAI](https://www.assemblyai.com/app) | Voice Agent API key. |
+| [Anthropic](https://console.anthropic.com) | API key for the Mastra agents (Sonnet). |
+| [You.com](https://you.com/platform) | Search API key. |
+| Node 22+ | Local development. |
+| Postgres | Local development (Render Postgres in production). |
+
+## Configuration
+
+Required environment variables on **both** the web service and the workflow service unless noted otherwise:
+
+| Variable | Description | Source |
+|---|---|---|
+| `DATABASE_URL` | Postgres connection string. | Render auto-injects from the `ravendr-db` Blueprint. Set it manually for local dev. |
+| `ANTHROPIC_API_KEY` | Used by every Mastra agent. | https://console.anthropic.com |
+| `YOU_API_KEY` | Used by `search_branch`. | https://you.com/platform |
+| `ASSEMBLYAI_API_KEY` | Used by `voice_session`. | https://www.assemblyai.com/app |
+| `ANTHROPIC_MODEL` | Override the LLM (default `claude-sonnet-4-20250514`). | Optional. |
+| `RENDER_API_KEY` | Web service only. Used to dispatch and cancel Workflow runs. | https://dashboard.render.com/settings/api-keys |
+| `WORKFLOW_SLUG` | Web service only. Slug of the Workflow service (default `ravendr-workflow`). | Your Render dashboard. |
+
 ## Run locally
 
 ```bash
-cp .env.example .env
-createdb ravendr
+cp .env.example .env       # fill in API keys
+createdb ravendr           # local Postgres
 npm install
-npm run migrate
-npm run dev           # web service on :3000
-npm run dev:tasks     # workflow runner in a second terminal
+npm run migrate            # apply migrations
+npm run dev                # web service on :3000
+npm run dev:tasks          # workflow runner in a second terminal
 ```
-
-Required env on **both** services:
-- `DATABASE_URL`, `ANTHROPIC_API_KEY`, `YOU_API_KEY`, `ASSEMBLYAI_API_KEY`
-
-Web only: `RENDER_API_KEY`, `WORKFLOW_SLUG` (default `ravendr-workflow`).
 
 ## Deploy
 
 1. Fork. Hit **Deploy to Render**. The Blueprint creates `ravendr-web` + `ravendr-db`.
 2. In the dashboard, create a Workflow service `ravendr-workflow`, same repo, start command `node dist/render/tasks/index.js`.
 3. Put secrets in an env group `ravendr-shared` so both services share them.
-4. Migrations run on every web deploy (`preDeployCommand: npm run migrate`).
+4. Migrations run on every web deploy via `preDeployCommand: npm run migrate`.
 
 ## Repo layout
 
@@ -120,34 +152,32 @@ One folder per vendor. Each owns its protocol or SDK; the Render task files are 
 
 ```
 src/
-  server.ts  routes.ts  config.ts      web service composition root
-  assemblyai/
-    voice-agent.ts                      AssemblyAI WebSocket protocol client
-  mastra/
-    agents.ts                           Planner, synthesizer, verifier factories
-  youcom/
-    research.ts                         You.com Research API adapter
+  server.ts  routes.ts  config.ts    web service composition root
+  assemblyai/                         AssemblyAI WebSocket protocol client
+  mastra/                             Agent factories (classifier, planner, synthesizer, verifier)
+  youcom/                             You.com Research API adapter
   render/
-    db.ts                               typed Postgres queries
-    event-bus.ts                        LISTEN/NOTIFY event bus
-    session-broker.ts                   pairs /ws/client with /ws/task
-    workflow-dispatcher.ts              @renderinc/sdk wrapper
-    tasks/
-      index.ts                          auto-registers every task with Render
-      research.ts                       ROOT orchestrator (pure Render Workflows)
-      assemblyai/
-        voice-session.ts                holds AssemblyAI WS + reverse WS
-      mastra/
-        classify-ask.ts                 ask-shape classifier
-        plan-queries.ts                 shape-aware planner
-        synthesize.ts                   shape-aware synthesizer
-        verify.ts                       shape-aware verifier + 1-retry
-      youcom/
-        search-branch.ts                one You.com call (× N parallel)
-  shared/                               ports + events + envelope + errors + logger
+    db.ts  event-bus.ts  session-broker.ts  workflow-dispatcher.ts
+    tasks/                            workflow tasks (auto-registered by tasks/index.ts)
+      research.ts                     orchestrator
+      assemblyai/voice-session.ts     root task; holds AssemblyAI + reverse WS
+      mastra/                         classify-ask · plan-queries · synthesize · verify
+      youcom/search-branch.ts         one You.com call (× N parallel)
+  shared/                             ports · events · errors · envelope · logger
 
-static/                                 vanilla ES modules (index.html + main.js + mic.js)
+static/                               vanilla ES modules (index.html · main.js · mic.js)
+migrations/                           sequenced .sql files applied by npm run migrate
 ```
+
+## Troubleshooting
+
+| Symptom | Fix |
+|---|---|
+| `Failed to create session` after deploy | Migrations have not run. Set `preDeployCommand: npm run migrate` on the web service in the Render dashboard, then redeploy. |
+| Workflow tasks fail with `RENDER_API_KEY missing` | The web service needs `RENDER_API_KEY` set so it can dispatch Workflow runs. Add it in the env group `ravendr-shared`. |
+| `503 AT_CAPACITY` from `/api/start` | The demo is at its 100-session cap. Wait a minute, or bump `MAX_CONCURRENT_SESSIONS` in `src/config.ts`. |
+| Task disappears from the dashboard mid-session | The cleanup daemon cancelled it because the 15-minute TTL elapsed. Start a new session. |
+| Voice goes silent during research | AssemblyAI's agent does not always narrate the tool result. The briefing still renders on screen with sources, so the experience is preserved. |
 
 ## License
 
