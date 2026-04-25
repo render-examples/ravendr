@@ -22,18 +22,6 @@ Tap the mic and say a research topic. Anything works: "Tell me about the Battle 
 
 Behind the scenes the app classifies your ask, plans a fan-out of search queries, hits You.com in parallel, writes the briefing with Anthropic Sonnet, and verifies it for completeness. Every one of those steps runs as its own Render Workflow task that you can open in the dashboard, inspect, and replay.
 
-## Highlights
-
-| Feature | What it gets you |
-|---|---|
-| **Hard 60-second budget** | The pipeline ships whatever finished by the deadline (`racePartial`), so the demo never feels stuck. |
-| **Shape-aware research** | A classifier tags the ask (`narrative`, `enumeration`, `comparison`, `specific`, `recent`); the planner and synthesizer use shape-specific prompts. |
-| **Parallel fan-out** | Up to 40 search queries run against You.com in parallel for enumeration-heavy asks. |
-| **Verify + retry** | A verifier agent judges the briefing against the original ask and triggers one retry with feedback if it falls short. |
-| **Live progress feed** | Every phase event streams to the browser over Server-Sent Events, driving the activity log on screen. |
-| **Concurrency safety** | 100 concurrent sessions cap, 15-minute TTL, cleanup daemon cancels expired Workflow runs automatically. |
-| **Per-task observability** | Every stage shows up as its own Render Workflow run with logs, status, and one-click replay. |
-
 ## Stack
 
 | | Platform | Job |
