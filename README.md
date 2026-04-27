@@ -78,29 +78,6 @@ npm run dev:tasks          # workflow runner in a second terminal
 3. Put secrets in an env group `ravendr-shared` so both services share them.
 4. Migrations run on every web deploy via `preDeployCommand: npm run migrate`.
 
-## Repo layout
-
-One folder per vendor. Each owns its protocol or SDK; the Render task files are thin orchestration glue that compose them.
-
-```
-src/
-  server.ts  routes.ts  config.ts    web service composition root
-  assemblyai/                         AssemblyAI WebSocket protocol client
-  mastra/                             Agent factories (classifier, planner, synthesizer, verifier)
-  youcom/                             You.com Research API adapter
-  render/
-    db.ts  event-bus.ts  session-broker.ts  workflow-dispatcher.ts
-    tasks/                            workflow tasks (auto-registered by tasks/index.ts)
-      research.ts                     orchestrator
-      assemblyai/voice-session.ts     root task; holds AssemblyAI + reverse WS
-      mastra/                         classify-ask · plan-queries · synthesize · verify
-      youcom/search-branch.ts         one You.com call (× N parallel)
-  shared/                             ports · events · errors · envelope · logger
-
-static/                               vanilla ES modules (index.html · main.js · mic.js)
-migrations/                           sequenced .sql files applied by npm run migrate
-```
-
 ## Troubleshooting
 
 | Symptom | Fix |
