@@ -16,7 +16,7 @@ const BaseSchema = z.object({
 
   DATABASE_URL: z.string().url(),
 
-  YOU_API_KEY: z.string().min(1),
+  YDC_API_KEY: z.string().min(1),
   YOU_BASE_URL: z.string().url().default("https://api.you.com/v1"),
 
   // Mastra's model router reads ANTHROPIC_API_KEY directly from env.

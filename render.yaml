@@ -14,7 +14,7 @@ previews:
 envVarGroups:
   - name: ravendr-shared
     envVars:
-      - key: YOU_API_KEY
+      - key: YDC_API_KEY
         displayName: You.com API key
         description: "From https://you.com/platform"
         sensitive: true
