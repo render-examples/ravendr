@@ -21,7 +21,7 @@ const BaseSchema = z.object({
 
   // Mastra's model router reads ANTHROPIC_API_KEY directly from env.
   ANTHROPIC_API_KEY: z.string().min(1),
-  ANTHROPIC_MODEL: z.string().default("claude-sonnet-4-20250514"),
+  ANTHROPIC_MODEL: z.string().default("claude-sonnet-4-6"),
 
   // AssemblyAI is held by the voiceSession task (see src/render/tasks).
   ASSEMBLYAI_API_KEY: z.string().min(1),

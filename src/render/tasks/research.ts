@@ -191,7 +191,7 @@ export const research = task(
           at: Date.now(),
           kind: "workflow.failed",
           runId,
-          message: err instanceof Error ? err.message : String(err),
+          message: formatWorkflowError(err),
         })
         .catch(() => {});
       throw err;
@@ -235,4 +235,27 @@ function timer(ms: number): Promise<void> {
     if (signal.aborted) resolve();
     else signal.addEventListener("abort", () => resolve(), { once: true });
   });
+}
+
+/** Render SDK sometimes stringifies subtask errors as [object Object]. */
+function formatWorkflowError(err: unknown): string {
+  if (!(err instanceof Error)) return String(err);
+  if (!err.message.includes("[object Object]")) return err.message;
+  const cause = err.cause;
+  if (cause instanceof Error) return cause.message;
+  if (typeof cause === "string") return cause;
+  if (cause && typeof cause === "object") {
+    const maybe = cause as {
+      message?: string;
+      error?: { message?: string };
+      data?: { error?: { message?: string } };
+    };
+    return (
+      maybe.message ??
+      maybe.error?.message ??
+      maybe.data?.error?.message ??
+      JSON.stringify(cause)
+    );
+  }
+  return err.message;
 }
