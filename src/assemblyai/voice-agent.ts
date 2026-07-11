@@ -89,6 +89,14 @@ export async function openVoiceAgent(
 
   opts.onBrowserMessage({ type: "ready" });
 
+  // AssemblyAI expects tool.result after reply.done for the turn that
+  // contained tool.call — not immediately on tool.call.
+  const pendingTools: Array<{
+    callId: string;
+    name: string;
+    args: Record<string, unknown>;
+  }> = [];
+
   let upstreamCount = 0;
   ws.on("message", (raw: Buffer) => {
     const event = parseJson<AssemblyEvent>(raw);
@@ -100,7 +108,7 @@ export async function openVoiceAgent(
       );
       upstreamCount++;
     }
-    handleUpstream(ws, event, opts);
+    handleUpstream(ws, event, opts, pendingTools);
   });
 
   ws.once("close", () => opts.onClose?.());
@@ -124,7 +132,12 @@ export async function openVoiceAgent(
 function handleUpstream(
   ws: WebSocket,
   event: AssemblyEvent,
-  opts: AssemblyVoiceAgentOpts
+  opts: AssemblyVoiceAgentOpts,
+  pendingTools: Array<{
+    callId: string;
+    name: string;
+    args: Record<string, unknown>;
+  }>
 ): void {
   switch (event.type) {
     case "reply.audio": {
@@ -168,46 +181,24 @@ function handleUpstream(
     case "tool.call": {
       const callId = String(event.call_id ?? "");
       const name = String(event.name ?? "");
-      const args =
-        (event.args as Record<string, unknown> | undefined) ?? {};
+      const args = parseToolArguments(event);
       logger.info(
         { sessionId: opts.sessionId, callId, name, args },
         "AssemblyAI tool.call"
       );
-      opts
-        .onToolCall({ callId, name, args })
-        .then((result) => {
-          logger.info(
-            {
-              sessionId: opts.sessionId,
-              callId,
-              resultLen: result.length,
-            },
-            "sending tool.result (success)"
-          );
-          ws.send(
-            JSON.stringify({
-              type: "tool.result",
-              call_id: callId,
-              result: JSON.stringify(result),
-            })
-          );
-        })
-        .catch((err) => {
-          logger.error(
-            { err, sessionId: opts.sessionId, callId },
-            "tool.call handler threw"
-          );
-          ws.send(
-            JSON.stringify({
-              type: "tool.result",
-              call_id: callId,
-              result: JSON.stringify(
-                "I hit an issue running that. Please try again."
-              ),
-            })
-          );
-        });
+      pendingTools.push({ callId, name, args });
+      break;
+    }
+    case "reply.done": {
+      if (event.status === "interrupted") {
+        pendingTools.length = 0;
+        break;
+      }
+      if (pendingTools.length === 0) break;
+      const queued = pendingTools.splice(0, pendingTools.length);
+      for (const { callId, name, args } of queued) {
+        void sendToolResult(ws, opts, callId, name, args);
+      }
       break;
     }
     case "session.error":
@@ -225,6 +216,68 @@ function handleUpstream(
         message: `${event.code ?? ""}: ${event.message ?? "unknown"}`,
       });
       break;
+  }
+}
+
+function parseToolArguments(
+  event: AssemblyEvent
+): Record<string, unknown> {
+  const raw = event.arguments ?? event.args;
+  if (!raw) return {};
+  if (typeof raw === "string") {
+    try {
+      const parsed = JSON.parse(raw) as unknown;
+      return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+        ? (parsed as Record<string, unknown>)
+        : {};
+    } catch {
+      return {};
+    }
+  }
+  if (typeof raw === "object" && !Array.isArray(raw)) {
+    return raw as Record<string, unknown>;
+  }
+  return {};
+}
+
+async function sendToolResult(
+  ws: WebSocket,
+  opts: AssemblyVoiceAgentOpts,
+  callId: string,
+  name: string,
+  args: Record<string, unknown>
+): Promise<void> {
+  try {
+    const result = await opts.onToolCall({ callId, name, args });
+    logger.info(
+      {
+        sessionId: opts.sessionId,
+        callId,
+        resultLen: result.length,
+      },
+      "sending tool.result (success)"
+    );
+    ws.send(
+      JSON.stringify({
+        type: "tool.result",
+        call_id: callId,
+        result: JSON.stringify(result),
+      })
+    );
+  } catch (err) {
+    logger.error(
+      { err, sessionId: opts.sessionId, callId },
+      "tool.call handler threw"
+    );
+    ws.send(
+      JSON.stringify({
+        type: "tool.result",
+        call_id: callId,
+        result: JSON.stringify(
+          "I hit an issue running that. Please try again."
+        ),
+      })
+    );
   }
 }
 
