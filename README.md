@@ -54,7 +54,7 @@ Required environment variables on **both** the web service and the workflow serv
 |---|---|---|
 | `DATABASE_URL` | Postgres connection string. | Render auto-injects from the `ravendr-db` Blueprint. Set it manually for local dev. |
 | `ANTHROPIC_API_KEY` | Used by every Mastra agent. | https://console.anthropic.com |
-| `YOU_API_KEY` | Used by `search_branch`. | https://you.com/platform |
+| `YDC_API_KEY` | Used by `search_branch`. | https://you.com/platform |
 | `ASSEMBLYAI_API_KEY` | Used by `voice_session`. | https://www.assemblyai.com/app |
 | `ANTHROPIC_MODEL` | Override the LLM (default `claude-sonnet-4-20250514`). | Optional. |
 | `RENDER_API_KEY` | Web service only. Used to dispatch and cancel Workflow runs. | https://dashboard.render.com/settings/api-keys |

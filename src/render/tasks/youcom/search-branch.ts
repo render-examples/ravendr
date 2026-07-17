@@ -40,7 +40,7 @@ export const search_branch = task(
     await events.start();
 
     const research = createYouComResearch({
-      apiKey: config.YOU_API_KEY,
+      apiKey: config.YDC_API_KEY,
       baseUrl: config.YOU_BASE_URL,
     });
 
